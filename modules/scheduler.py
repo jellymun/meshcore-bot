@@ -91,26 +91,60 @@ class MessageScheduler:
         except ValueError:
             return False
     
-    def send_scheduled_message(self, channel: str, message: str):
-        """Send a scheduled message (synchronous wrapper for schedule library)"""
-        current_time = self.get_current_time()
-        self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
-        
-        import asyncio
-        
-        # Create a new event loop for this thread if one doesn't exist
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Run the async function in the event loop
-        loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+def send_scheduled_message(self, channel: str, message: str):
+    """Send a scheduled message (synchronous wrapper for schedule library)"""
+    current_time = self.get_current_time()
+    self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
     
-    async def _send_scheduled_message_async(self, channel: str, message: str):
-        """Send a scheduled message (async implementation)"""
-        await self.bot.command_manager.send_channel_message(channel, message)
+    import asyncio
+    
+    # Check if message is 'get-update' and replace with script output
+    if message.strip().lower() == 'get-update':
+        try:
+            import subprocess
+            self.logger.info("🔄 Executing get-update.py script")
+            
+            # Execute get-update.py synchronously 
+            #assume that it will read the script from the package directory ; unsure how to code this apart from hard coding.
+            result = subprocess.run(
+                ['python3', 'get-update.py'], 
+                capture_output=True, 
+                text=True, 
+                timeout=60
+            )
+            
+            if result.stdout.strip():
+                message = result.stdout.strip()
+                self.logger.info("✅ get-update.py executed successfully")
+            else:
+                message = "get-update.py executed - no output"
+                self.logger.info("ℹ️ get-update.py executed but returned no output")
+                
+            if result.stderr.strip():
+                error_msg = result.stderr.strip()
+                message += f"\n[Errors: {error_msg}]"
+                self.logger.warning(f"⚠️ get-update.py stderr: {error_msg}")
+                
+        except subprocess.TimeoutExpired:
+            message = "get-update.py timed out after 5 minutes"
+            self.logger.error("⏰ get-update.py execution timed out")
+        except Exception as e:
+            message = f"Error running get-update.py: {str(e)}"
+            self.logger.error(f"❌ Error executing get-update.py: {str(e)}")
+    
+    # Create a new event loop for this thread if one doesn't exist
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    # Run the async function in the event loop
+    loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+
+async def _send_scheduled_message_async(self, channel: str, message: str):
+    """Send a scheduled message (async implementation)"""
+    await self.bot.command_manager.send_channel_message(channel, message)
     
     def start(self):
         """Start the scheduler in a separate thread"""
