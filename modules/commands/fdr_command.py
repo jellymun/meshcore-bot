@@ -91,24 +91,30 @@ class FdrCommand(BaseCommand):
 
     # --- Execution Method ---
 
-    # FIX: Using 'MeshMessage' as a string to resolve forward reference/type hint issue
+    # Using 'MeshMessage' as a string to resolve forward reference/type hint issue
     async def execute(self, message: 'MeshMessage') -> bool:
-        """Execute the FDR command, optionally using a user-supplied district name"""
+        """Execute the FDR command, optionally using a user-supplied district name or message location"""
         
-        # 1. Determine Target Name
+        # Default to the primary district
+        target_name = DEFAULT_DISTRICT_NAME
+        
+        # 1. Check for text arguments (highest priority)
         # Split message.text once to separate command (e.g., 'fdr') from arguments (e.g., 'Greater Hunter')
         command_parts = message.text.split(maxsplit=1)
         
-        # If there is a second part, use it as the target name, otherwise use the default
         if len(command_parts) > 1:
+            # Use the explicit text argument
             target_name = command_parts[1].strip()
-        else:
-            target_name = DEFAULT_DISTRICT_NAME
+        
+        # 2. Fallback: If no argument was provided, check the message's built-in location
+        elif hasattr(message, 'location') and message.location:
+            # Use the location from the MeshMessage object
+            target_name = message.location
             
         response = None
         
         try:
-            # 2. Fetch and Parse Data
+            # 3. Fetch and Parse Data
             root = await asyncio.to_thread(self._fetch_data)
             
             if root is None:
@@ -116,11 +122,11 @@ class FdrCommand(BaseCommand):
                 await self.send_response(message, response)
                 return False
 
-            # 3. Extract Data for the Target Name
+            # 4. Extract Data for the Target Name
             # Pass the dynamic target_name to the extraction function
             data = await asyncio.to_thread(self._extract_data, root, target_name)
 
-            # 4. Format Response
+            # 5. Format Response
             if data is None:
                 response = f"⚠️ Fire data for '{target_name}' not found in the feed. Check the full region list for correct spelling."
             else:
