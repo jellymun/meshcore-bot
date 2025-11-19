@@ -5,7 +5,7 @@ or a user-specified district/council area.
 """
 
 from .base_command import BaseCommand
-from ..models import MeshMessage
+from ..models import MeshMessage # Keep the import for runtime use
 
 import requests
 import xml.etree.ElementTree as ET
@@ -79,8 +79,8 @@ class FdrCommand(BaseCommand):
         """
         Format fire danger data into a concise text message.
         """
-        today_ban = "🚫 BAN" if data['FireBanToday'].lower() == 'yes' else "😁 No ban"
-        tomorrow_ban = "🫣 🚫 BAN" if data['FireBanTomorrow'].lower() == 'yes' else "😃 No ban"
+        today_ban = "BAN" if data['FireBanToday'].lower() == 'yes' else "No ban"
+        tomorrow_ban = "BAN" if data['FireBanTomorrow'].lower() == 'yes' else "No ban"
         
         # Use the requested district name in the output message
         message = (f"🔥 {district_name}: Today {data['DangerLevelToday']} ({today_ban}), "
@@ -91,7 +91,8 @@ class FdrCommand(BaseCommand):
 
     # --- Execution Method ---
 
-    async def execute(self, message: MeshMessage) -> bool:
+    # FIX: Using 'MeshMessage' as a string to resolve forward reference/type hint issue
+    async def execute(self, message: 'MeshMessage') -> bool:
         """Execute the FDR command, optionally using a user-supplied district name"""
         
         # 1. Determine Target Name
@@ -131,7 +132,8 @@ class FdrCommand(BaseCommand):
                 
         except Exception as e:
             error_msg = f"Error executing FDR command: {e}"
-            self.bot.logger.error(error_msg)
+            # Use bot.logger to avoid printing raw error to user unless necessary
+            self.bot.logger.error(error_msg) 
             await self.send_response(message, "❌ An unexpected error occurred while processing the fire data.")
             return False
     
