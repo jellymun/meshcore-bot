@@ -151,3 +151,102 @@ def format_location_for_display(city: Optional[str], state: Optional[str] = None
     # Join parts and abbreviate if needed
     full_location = ', '.join(location_parts)
     return abbreviate_location(full_location, max_length)
+
+
+def get_major_city_queries(city: str, state_abbr: Optional[str] = None) -> list:
+    """
+    Get prioritized geocoding queries for major cities that have multiple locations.
+    This helps ensure that common city names resolve to the most likely major city
+    rather than a small town with the same name.
+    
+    Args:
+        city: City name (normalized, lowercase)
+        state_abbr: Optional state abbreviation (e.g., "CA", "NY")
+        
+    Returns:
+        List of geocoding query strings in priority order
+    """
+    city_lower = city.lower().strip()
+    
+    # Comprehensive mapping of major cities with multiple locations
+    # Format: 'city_name': [list of queries in priority order]
+    major_city_mappings = {
+        'new york': ['New York, NY, USA', 'New York City, NY, USA'],
+        'los angeles': ['Los Angeles, CA, USA'],
+        'chicago': ['Chicago, IL, USA'],
+        'houston': ['Houston, TX, USA'],
+        'phoenix': ['Phoenix, AZ, USA'],
+        'philadelphia': ['Philadelphia, PA, USA'],
+        'san antonio': ['San Antonio, TX, USA'],
+        'san diego': ['San Diego, CA, USA'],
+        'dallas': ['Dallas, TX, USA'],
+        'san jose': ['San Jose, CA, USA'],
+        'austin': ['Austin, TX, USA'],
+        'jacksonville': ['Jacksonville, FL, USA'],
+        'san francisco': ['San Francisco, CA, USA'],
+        'columbus': ['Columbus, OH, USA'],
+        'fort worth': ['Fort Worth, TX, USA'],
+        'charlotte': ['Charlotte, NC, USA'],
+        'seattle': ['Seattle, WA, USA'],
+        'denver': ['Denver, CO, USA'],
+        'washington': ['Washington, DC, USA'],
+        'boston': ['Boston, MA, USA'],
+        'el paso': ['El Paso, TX, USA'],
+        'detroit': ['Detroit, MI, USA'],
+        'nashville': ['Nashville, TN, USA'],
+        'portland': ['Portland, OR, USA', 'Portland, ME, USA'],
+        'oklahoma city': ['Oklahoma City, OK, USA'],
+        'las vegas': ['Las Vegas, NV, USA'],
+        'memphis': ['Memphis, TN, USA'],
+        'louisville': ['Louisville, KY, USA'],
+        'baltimore': ['Baltimore, MD, USA'],
+        'milwaukee': ['Milwaukee, WI, USA'],
+        'albuquerque': ['Albuquerque, NM, USA'],
+        'tucson': ['Tucson, AZ, USA'],
+        'fresno': ['Fresno, CA, USA'],
+        'sacramento': ['Sacramento, CA, USA'],
+        'kansas city': ['Kansas City, MO, USA', 'Kansas City, KS, USA'],
+        'mesa': ['Mesa, AZ, USA'],
+        'atlanta': ['Atlanta, GA, USA'],
+        'omaha': ['Omaha, NE, USA'],
+        'colorado springs': ['Colorado Springs, CO, USA'],
+        'raleigh': ['Raleigh, NC, USA'],
+        'virginia beach': ['Virginia Beach, VA, USA'],
+        'miami': ['Miami, FL, USA'],
+        'oakland': ['Oakland, CA, USA'],
+        'minneapolis': ['Minneapolis, MN, USA'],
+        'tulsa': ['Tulsa, OK, USA'],
+        'cleveland': ['Cleveland, OH, USA'],
+        'wichita': ['Wichita, KS, USA'],
+        'arlington': ['Arlington, TX, USA', 'Arlington, VA, USA'],
+        'new orleans': ['New Orleans, LA, USA'],
+        'honolulu': ['Honolulu, HI, USA'],
+        # Cities with multiple locations that need disambiguation
+        'albany': ['Albany, NY, USA', 'Albany, OR, USA', 'Albany, CA, USA'],
+        'springfield': ['Springfield, IL, USA', 'Springfield, MO, USA', 'Springfield, MA, USA'],
+        'franklin': ['Franklin, TN, USA', 'Franklin, MA, USA'],
+        'georgetown': ['Georgetown, TX, USA', 'Georgetown, SC, USA'],
+        'madison': ['Madison, WI, USA', 'Madison, AL, USA'],
+        'auburn': ['Auburn, AL, USA', 'Auburn, WA, USA'],
+        'troy': ['Troy, NY, USA', 'Troy, MI, USA'],
+        'clinton': ['Clinton, IA, USA', 'Clinton, MS, USA'],
+        'paris': ['Paris, TX, USA', 'Paris, IL, USA', 'Paris, TN, USA'],
+    }
+    
+    # Check if this is a major city
+    if city_lower in major_city_mappings:
+        queries = major_city_mappings[city_lower].copy()
+        
+        # If state abbreviation was provided, prioritize queries with that state
+        if state_abbr:
+            state_upper = state_abbr.upper()
+            # Move matching state queries to the front
+            matching = [q for q in queries if f', {state_upper},' in q or q.endswith(f', {state_upper}')]
+            non_matching = [q for q in queries if q not in matching]
+            if matching:
+                return matching + non_matching
+        
+        return queries
+    
+    # Not a major city - return empty list (caller should use standard geocoding)
+    return []

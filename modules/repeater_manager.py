@@ -2084,39 +2084,63 @@ class RepeaterManager:
                 self.logger.info(f"✅ Contact '{contact_name}' not found in device contacts (already removed) - treating as success")
                 device_removal_successful = True
             else:
-                # Remove the contact using the documented MeshCore API: meshcore.remove_contact(key)
+                # Remove the contact using the MeshCore API: meshcore.commands.remove_contact(key)
                 try:
-                    self.logger.info(f"Removing companion '{contact_name}' from device using meshcore.remove_contact()...")
+                    self.logger.info(f"Removing companion '{contact_name}' from device using meshcore.commands.remove_contact()...")
                     self.logger.debug(f"Contact details: public_key={public_key}, contact_key={contact_key}, name='{contact_name}'")
                     
-                    # Check if the method exists
-                    if not hasattr(self.bot.meshcore, 'remove_contact'):
-                        self.logger.error(f"❌ meshcore.remove_contact() method not found on meshcore object")
+                    # Check if the commands.remove_contact method exists
+                    if not hasattr(self.bot.meshcore, 'commands') or not hasattr(self.bot.meshcore.commands, 'remove_contact'):
+                        self.logger.error(f"❌ meshcore.commands.remove_contact() method not found on meshcore object")
                         device_removal_successful = False
                     else:
-                        # Use the documented API: meshcore.remove_contact(key)
-                        # Try with public_key first (most reliable identifier)
-                        try:
-                            self.logger.debug(f"Calling meshcore.remove_contact(public_key='{public_key[:16]}...')")
-                            result = await asyncio.wait_for(
-                                self.bot.meshcore.remove_contact(public_key),
-                                timeout=30.0
-                            )
-                            
-                            # Check if result indicates success
-                            # Result could be: True, EventType.OK, or an event object with .type
-                            if result is True:
-                                device_removal_successful = True
-                                self.logger.info(f"✅ remove_contact returned True - removal successful")
-                            elif hasattr(result, 'type') and result.type == EventType.OK:
-                                device_removal_successful = True
-                                self.logger.info(f"✅ remove_contact returned EventType.OK - removal successful")
-                            else:
-                                self.logger.warning(f"⚠️ remove_contact returned unexpected result: {result}")
-                                device_removal_successful = False
+                        # Use the MeshCore API: meshcore.commands.remove_contact(key)
+                        # Try with public_key first (most reliable identifier), then contact_key as fallback
+                        removal_attempted = False
+                        for key_to_try, key_name in [(public_key, 'public_key'), (contact_key, 'contact_key')]:
+                            if not key_to_try:
+                                continue
+                            try:
+                                self.logger.debug(f"Calling meshcore.commands.remove_contact({key_name}='{key_to_try[:16]}...')")
+                                result = await asyncio.wait_for(
+                                    self.bot.meshcore.commands.remove_contact(key_to_try),
+                                    timeout=30.0
+                                )
+                                removal_attempted = True
                                 
-                        except Exception as e:
-                            self.logger.error(f"❌ meshcore.remove_contact() failed: {type(e).__name__}: {e}")
+                                # Check if result indicates success
+                                # Result could be: True, EventType.OK, or an event object with .type
+                                if result is True:
+                                    device_removal_successful = True
+                                    self.logger.info(f"✅ remove_contact returned True - removal successful")
+                                    break
+                                elif hasattr(result, 'type') and result.type == EventType.OK:
+                                    device_removal_successful = True
+                                    self.logger.info(f"✅ remove_contact returned EventType.OK - removal successful")
+                                    break
+                                elif hasattr(result, 'type') and result.type == EventType.ERROR:
+                                    error_code = result.payload.get('error_code', 'unknown') if hasattr(result, 'payload') else 'unknown'
+                                    if error_code == 2:
+                                        # Contact not found (already removed) - treat as success
+                                        device_removal_successful = True
+                                        self.logger.info(f"✅ Contact not found (already removed) - treating as success")
+                                        break
+                                    else:
+                                        self.logger.debug(f"remove_contact returned error_code {error_code}, trying next key...")
+                                        continue
+                                else:
+                                    self.logger.debug(f"remove_contact returned unexpected result: {result}, trying next key...")
+                                    continue
+                                    
+                            except Exception as e:
+                                self.logger.debug(f"remove_contact({key_name}) failed: {type(e).__name__}: {e}, trying next key...")
+                                continue
+                        
+                        if not removal_attempted:
+                            self.logger.error(f"❌ No valid key available for remove_contact")
+                            device_removal_successful = False
+                        elif not device_removal_successful:
+                            self.logger.error(f"❌ All remove_contact attempts failed")
                             device_removal_successful = False
                     
                 except Exception as e:

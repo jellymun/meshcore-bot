@@ -96,6 +96,21 @@ admin_pubkeys =
 # These commands will only work for users in the admin_pubkeys list
 admin_commands = repeater,webviewer
 
+[Plugin_Overrides]
+# Plugin Overrides - Use alternative plugin implementations
+# Format: command_name = alternative_file_name
+# The alternative_file_name should be the name of a Python file (without .py extension)
+# in the modules/commands/alternatives/ directory
+# 
+# Example: To use an alternative weather plugin for international users:
+# wx = wx_international
+# 
+# This will replace the default wx command with the plugin from
+# modules/commands/alternatives/wx_international.py
+# 
+# Note: The alternative plugin must have the same 'name' metadata as the command
+# it's replacing, or the override will use the alternative plugin's name instead.
+
 [Companion_Purge]
 # Enable companion contact purging
 # true: Purge inactive companions when contact list is full
@@ -249,6 +264,12 @@ n2yo_api_key =
 # Get free key at: https://docs.airnowapi.org/
 airnow_api_key = 
 
+# Forecast.Solar API key for solar forecast data
+# Get key at: https://forecast.solar/ (free tier works without key, paid tier for 3+ day forecasts)
+# Free tier: 2-day forecast, 1-hour resolution
+# Paid tier (14 EUR/year): 3-6 day forecast, 15-30 minute resolution
+forecast_solar_api_key = 
+
 # Repeater prefix API URL for prefix command
 # Leave empty to disable prefix command functionality
 # Example: https://map.w0z.is/api/stats/repeater-prefixes?region=seattle
@@ -299,6 +320,25 @@ max_prefix_range = 200
 # When users type "wx seattle", it will search for "seattle, WA, USA"
 # Use 2-letter state abbreviation (e.g., WA, CA, NY, TX)
 default_state = WA
+
+# Default country for city name disambiguation (for international weather plugin)
+# Use 2-letter country code (e.g., US, CA, GB, AU)
+default_country = US
+
+# Temperature unit for weather display
+# Options: fahrenheit, celsius
+# Default: fahrenheit
+temperature_unit = fahrenheit
+
+# Wind speed unit for weather display
+# Options: mph, kmh, ms (meters per second)
+# Default: mph
+wind_speed_unit = mph
+
+# Precipitation unit for weather display
+# Options: inch, mm
+# Default: inch
+precipitation_unit = inch
 
 [Solar_Config]
 # URL timeout for external API calls (seconds)

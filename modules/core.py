@@ -392,6 +392,25 @@ prefix_free_days = 30
 # Use 2-letter state abbreviation (e.g., WA, CA, NY, TX)
 default_state = WA
 
+# Default country for city name disambiguation (for international weather plugin)
+# Use 2-letter country code (e.g., US, CA, GB, AU)
+default_country = US
+
+# Temperature unit for weather display
+# Options: fahrenheit, celsius
+# Default: fahrenheit
+temperature_unit = fahrenheit
+
+# Wind speed unit for weather display
+# Options: mph, kmh, ms (meters per second)
+# Default: mph
+wind_speed_unit = mph
+
+# Precipitation unit for weather display
+# Options: inch, mm
+# Default: inch
+precipitation_unit = inch
+
 [Path_Command]
 # Geographic proximity calculation method
 # simple: Use proximity to bot location (default)
