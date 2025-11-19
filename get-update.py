@@ -79,7 +79,7 @@ def format_message(data: Dict[str, str]) -> str:
     tomorrow_ban = "BAN" if data['FireBanTomorrow'].lower() == 'yes' else "No ban"
     
     # Use 'Sydney' in the output message for brevity
-    message = (f"Sydney Fire: Today {data['DangerLevelToday']} ({today_ban}), "
+    message = (f"Sydney Region FDI : Today {data['DangerLevelToday']} ({today_ban}), "
                f"Tomor {data['DangerLevelTomorrow']} ({tomorrow_ban})")
     
     # Ensure message is under 140 characters
