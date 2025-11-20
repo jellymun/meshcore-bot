@@ -84,7 +84,7 @@ class FdrCommand(BaseCommand):
         
         # Use the requested district name in the output message
         message = (f"🔥 {district_name}: Today {data['DangerLevelToday']} ({today_ban}), "
-                   f"Tomor {data['DangerLevelTomorrow']} ({tomorrow_ban})")
+                   f"Tomorrow {data['DangerLevelTomorrow']} ({tomorrow_ban})")
         
         return message
 
@@ -98,16 +98,37 @@ class FdrCommand(BaseCommand):
         # Default to the primary district
         target_name = DEFAULT_DISTRICT_NAME
         
+        # Robustly obtain text/content from MeshMessage objects (message implementations vary)
+        # Prefer message.content (the project's MessageHandler uses 'content'), but accept other attrs.
+        text_value = getattr(message, 'content', None)
+        if not text_value:
+            # try common alternatives
+            for attr in ('text', 'body', 'message', 'msg'):
+                text_value = getattr(message, attr, None)
+                if isinstance(text_value, str) and text_value.strip():
+                    break
+            else:
+                # try payload-like attribute
+                payload = getattr(message, 'payload', None)
+                if isinstance(payload, dict):
+                    for key in ('text', 'content', 'body', 'message'):
+                        tv = payload.get(key)
+                        if isinstance(tv, str) and tv.strip():
+                            text_value = tv
+                            break
+        if not isinstance(text_value, str):
+            text_value = ''
+
         # 1. Check for text arguments (highest priority)
-        # Split message.text once to separate command (e.g., 'fdr') from arguments (e.g., 'Greater Hunter')
-        command_parts = message.text.split(maxsplit=1)
+        # Split text_value once to separate command (e.g., 'fdr') from arguments (e.g., 'Greater Hunter')
+        command_parts = text_value.split(maxsplit=1) if text_value else []
         
         if len(command_parts) > 1:
             # Use the explicit text argument
             target_name = command_parts[1].strip()
         
         # 2. Fallback: If no argument was provided, check the message's built-in location
-        elif hasattr(message, 'location') and message.location:
+        elif hasattr(message, 'location') and getattr(message, 'location'):
             # Use the location from the MeshMessage object
             target_name = message.location
             
