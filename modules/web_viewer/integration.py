@@ -1,300 +1,437 @@
 #!/usr/bin/env python3
 """
-Message scheduler functionality for the MeshCore Bot
-Handles scheduled messages and timing
+Web Viewer Integration for MeshCore Bot
+Provides integration between the main bot and the web viewer
 """
 
-import time
 import threading
-import schedule
-import datetime
-import pytz
-import asyncio
-from typing import Dict
+import time
+import subprocess
+import sys
+import os
+import sqlite3 # Import added for database initialization
+import json # Import added for database initialization
+from pathlib import Path
 
-class MessageScheduler:
-    """Manages scheduled messages and timing"""
+class BotIntegration:
+    """Simple bot integration for web viewer compatibility"""
+    
+    def __init__(self, bot):
+        self.bot = bot
+        self.circuit_breaker_open = False
+        self.circuit_breaker_failures = 0
+        self.is_shutting_down = False
+    
+    def reset_circuit_breaker(self):
+        """Reset the circuit breaker"""
+        self.circuit_breaker_open = False
+        self.circuit_breaker_failures = 0
+    
+    def capture_full_packet_data(self, packet_data):
+        """Capture full packet data and store in database for web viewer"""
+        try:
+            import sqlite3
+            import json
+            import time
+            
+            # Ensure packet_data is a dict (might be passed as dict already)
+            if not isinstance(packet_data, dict):
+                packet_data = self._make_json_serializable(packet_data)
+                if not isinstance(packet_data, dict):
+                    # If still not a dict, wrap it
+                    packet_data = {'data': packet_data}
+            
+            # Add hops field from path_len if not already present
+            # path_len represents the number of hops (each byte = 1 hop)
+            if 'hops' not in packet_data and 'path_len' in packet_data:
+                packet_data['hops'] = packet_data.get('path_len', 0)
+            elif 'hops' not in packet_data:
+                # If no path_len either, default to 0 hops
+                packet_data['hops'] = 0
+            
+            # Convert non-serializable objects to strings
+            serializable_data = self._make_json_serializable(packet_data)
+            
+            # Store in database for web viewer to read
+            db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Insert packet data
+            cursor.execute('''
+                INSERT INTO packet_stream (timestamp, data, type)
+                VALUES (?, ?, ?)
+            ''', (time.time(), json.dumps(serializable_data), 'packet'))
+            
+            conn.commit()
+            conn.close()
+            
+            # Periodic cleanup (every 100 packets to avoid performance impact)
+            if not hasattr(self, '_packet_count'):
+                self._packet_count = 0
+            self._packet_count += 1
+            if self._packet_count % 100 == 0:
+                self.cleanup_old_data()
+            
+        except Exception as e:
+            self.bot.logger.debug(f"Error storing packet data: {e}")
+    
+    def capture_command(self, message, command_name, response, success):
+        """Capture command data and store in database for web viewer"""
+        try:
+            import sqlite3
+            import json
+            import time
+            
+            # Extract data from message object
+            user = getattr(message, 'sender_id', 'Unknown')
+            channel = getattr(message, 'channel', 'Unknown')
+            user_input = getattr(message, 'content', f'/{command_name}')
+            
+            # Construct command data structure
+            command_data = {
+                'user': user,
+                'channel': channel,
+                'command': command_name,
+                'user_input': user_input,
+                'response': response,
+                'success': success,
+                'timestamp': time.time()
+            }
+            
+            # Convert non-serializable objects to strings
+            serializable_data = self._make_json_serializable(command_data)
+            
+            # Store in database for web viewer to read
+            db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Insert command data
+            cursor.execute('''
+                INSERT INTO packet_stream (timestamp, data, type)
+                VALUES (?, ?, ?)
+            ''', (time.time(), json.dumps(serializable_data), 'command'))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            self.bot.logger.debug(f"Error storing command data: {e}")
+    
+    def capture_packet_routing(self, routing_data):
+        """Capture packet routing data and store in database for web viewer"""
+        try:
+            import sqlite3
+            import json
+            import time
+            
+            # Convert non-serializable objects to strings
+            serializable_data = self._make_json_serializable(routing_data)
+            
+            # Store in database for web viewer to read
+            db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Insert routing data
+            cursor.execute('''
+                INSERT INTO packet_stream (timestamp, data, type)
+                VALUES (?, ?, ?)
+            ''', (time.time(), json.dumps(serializable_data), 'routing'))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            self.bot.logger.debug(f"Error storing routing data: {e}")
+    
+    def cleanup_old_data(self, days_to_keep: int = 7):
+        """Clean up old packet stream data to prevent database bloat"""
+        try:
+            import sqlite3
+            import time
+            
+            cutoff_time = time.time() - (days_to_keep * 24 * 60 * 60)
+            
+            db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Clean up old packet stream data
+            cursor.execute('DELETE FROM packet_stream WHERE timestamp < ?', (cutoff_time,))
+            deleted_count = cursor.rowcount
+            
+            conn.commit()
+            conn.close()
+            
+            if deleted_count > 0:
+                self.bot.logger.info(f"Cleaned up {deleted_count} old packet stream entries (older than {days_to_keep} days)")
+            
+        except Exception as e:
+            self.bot.logger.error(f"Error cleaning up old packet stream data: {e}")
+    
+    def _make_json_serializable(self, obj, depth=0, max_depth=3):
+        """Convert non-JSON-serializable objects to strings with depth limiting"""
+        if depth > max_depth:
+            return str(obj)
+        
+        # Handle basic types first
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        elif isinstance(obj, (list, tuple)):
+            return [self._make_json_serializable(item, depth + 1) for item in obj]
+        elif isinstance(obj, dict):
+            return {k: self._make_json_serializable(v, depth + 1) for k, v in obj.items()}
+        elif hasattr(obj, 'name'):  # Enum-like objects
+            return obj.name
+        elif hasattr(obj, 'value'):  # Enum values
+            return obj.value
+        elif hasattr(obj, '__dict__'):
+            # Convert objects to dict, but limit depth
+            try:
+                return {k: self._make_json_serializable(v, depth + 1) for k, v in obj.__dict__.items()}
+            except (RecursionError, RuntimeError):
+                return str(obj)
+        else:
+            return str(obj)
+    
+    def shutdown(self):
+        """Mark as shutting down"""
+        self.is_shutting_down = True
 
+class WebViewerIntegration:
+    """Integration class for starting/stopping the web viewer with the bot"""
+    
     def __init__(self, bot):
         self.bot = bot
         self.logger = bot.logger
-        self.scheduled_messages = {}
-        self.scheduler_thread = None
+        self.viewer_process = None
+        self.viewer_thread = None
+        self.running = False
+        
+        # Get web viewer settings from config
+        self.enabled = bot.config.getboolean('Web_Viewer', 'enabled', fallback=False)
+        self.host = bot.config.get('Web_Viewer', 'host', fallback='127.0.0.1')
+        self.port = bot.config.getint('Web_Viewer', 'port', fallback=8080)  # Web viewer uses 8080
+        self.debug = bot.config.getboolean('Web_Viewer', 'debug', fallback=False)
+        self.auto_start = bot.config.getboolean('Web_Viewer', 'auto_start', fallback=False)
+        
+        # Process monitoring
+        self.restart_count = 0
+        self.max_restarts = 5
+        self.last_restart = 0
+        
+        # **NEW: Initialize the database and table structure**
+        self._initialize_database()
 
-    def get_current_time(self):
-        """Get current time in configured timezone"""
-        timezone_str = self.bot.config.get('Bot', 'timezone', fallback='')
+        # Initialize bot integration for compatibility
+        self.bot_integration = BotIntegration(bot)
+        
+        if self.enabled and self.auto_start:
+            self.start_viewer()
 
-        if timezone_str:
-            try:
-                tz = pytz.timezone(timezone_str)
-                return datetime.datetime.now(tz)
-            except pytz.exceptions.UnknownTimeZoneError:
-                self.logger.warning(f"Invalid timezone '{timezone_str}', using system timezone")
-                return datetime.datetime.now()
-        else:
-            return datetime.datetime.now()
+    def _initialize_database(self):
+        """Initialize the SQLite database and required tables."""
+        db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+        self.logger.info(f"Initializing database at: {db_path}")
 
-    def setup_scheduled_messages(self):
-        """Setup scheduled messages from config"""
-        if not self.bot.config.has_section('Scheduled_Messages'):
-            self.logger.info("No Scheduled_Messages section found in config")
-            return
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
 
-        self.logger.info("Found Scheduled_Messages section")
-        for time_str, message_info in self.bot.config.items('Scheduled_Messages'):
-            self.logger.info(f"Processing scheduled message: '{time_str}' -> '{message_info}'")
-            try:
-                # Validate time format first
-                if not self._is_valid_time_format(time_str):
-                    self.logger.warning(f"Invalid time format '{time_str}' for scheduled message: {message_info}")
-                    continue
-
-                channel, message = message_info.split(':', 1)
-                # Convert HHMM to HH:MM for scheduler
-                hour = int(time_str[:2])
-                minute = int(time_str[2:])
-                schedule_time = f"{hour:02d}:{minute:02d}"
-
-                # NOTE: We use self.send_scheduled_message, which handles the async wrapping
-                schedule.every().day.at(schedule_time).do(
-                    self.send_scheduled_message, channel.strip(), message.strip()
+            # Create the packet_stream table if it doesn't exist
+            # This table stores all captured data (packets, commands, routing)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS packet_stream (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    data TEXT NOT NULL,
+                    type TEXT NOT NULL
                 )
-                self.scheduled_messages[time_str] = (channel.strip(), message.strip())
-                self.logger.info(f"Scheduled message: {schedule_time} -> {channel}: {message}")
-            except ValueError:
-                self.logger.warning(f"Invalid scheduled message format: {message_info}")
-            except Exception as e:
-                self.logger.warning(f"Error setting up scheduled message '{time_str}': {e}")
+            ''')
+            
+            conn.commit()
+            conn.close()
+            self.logger.info("Database and packet_stream table ensured to exist.")
 
-        # Setup interval-based advertising
-        self.setup_interval_advertising()
-
-    def setup_interval_advertising(self):
-        """Setup interval-based advertising from config"""
-        try:
-            advert_interval_hours = self.bot.config.getint('Bot', 'advert_interval_hours', fallback=0)
-            if advert_interval_hours > 0:
-                self.logger.info(f"Setting up interval-based advertising every {advert_interval_hours} hours")
-                # Initialize bot's last advert time to now to prevent immediate advert if not already set
-                if not hasattr(self.bot, 'last_advert_time') or self.bot.last_advert_time is None:
-                    self.bot.last_advert_time = time.time()
-            else:
-                self.logger.info("Interval-based advertising disabled (advert_interval_hours = 0)")
         except Exception as e:
-            self.logger.warning(f"Error setting up interval advertising: {e}")
+            self.logger.error(f"Failed to initialize database: {e}")
+            # Consider raising the exception or marking the integration as failed
 
-    def _is_valid_time_format(self, time_str: str) -> bool:
-        """Validate time format (HHMM)"""
-        try:
-            if len(time_str) != 4:
-                return False
-            hour = int(time_str[:2])
-            minute = int(time_str[2:])
-            return 0 <= hour <= 23 and 0 <= minute <= 59
-        except ValueError:
-            return False
-
-    async def _invoke_internal_command_async(self, channel: str, command_text: str):
-        """
-        Invoke a bot command via the existing CommandManager API by constructing
-        a MeshMessage and letting CommandManager run its normal matching/execution flow.
-        """
-        cmdmgr = getattr(self.bot, 'command_manager', None)
-        if not cmdmgr:
-            self.logger.error("bot.command_manager is not available. Cannot run internal command.")
+    
+    def start_viewer(self):
+        """Start the web viewer in a separate thread"""
+        if self.running:
+            self.logger.warning("Web viewer is already running")
             return
-
-        # Import here to avoid circular import issues at module level
-        from .models import MeshMessage
-
-        # Construct a MeshMessage that represents the scheduled invocation.
-        # Use a scheduler sender id so plugins that check sender can see it's internal.
-        msg = MeshMessage(
-            content=command_text.strip(),
-            sender_id='scheduler',
-            channel=channel,
-            is_dm=False,   # set True if you intend to invoke DM-only commands
-        )
-
+        
         try:
-            # Quick pre-check: do any keywords/plugins match?
-            matches = cmdmgr.check_keywords(msg)
-            if not matches:
-                # Try with an explicit '!' prefix (some commands expect '!' style)
-                msg_alt = MeshMessage(content='!' + msg.content, sender_id=msg.sender_id, channel=msg.channel, is_dm=msg.is_dm)
-                matches = cmdmgr.check_keywords(msg_alt)
-                if matches:
-                    msg = msg_alt
-
-            if not matches:
-                # No match found — inform channel that the scheduled command is unknown
-                await cmdmgr.send_channel_message(channel, f"Failed to run internal command '{command_text}': not found.")
-                self.logger.error(f"No matching command/plugin found for scheduled command: {command_text}")
-                return
-
-            # Execute the command via the CommandManager's normal execution path
-            await cmdmgr.execute_commands(msg)
-            self.logger.info(f"Scheduled internal command executed: {command_text}")
-
+            # Start the web viewer
+            self.viewer_thread = threading.Thread(target=self._run_viewer, daemon=True)
+            self.viewer_thread.start()
+            self.running = True
+            self.logger.info(f"Web viewer started on http://{self.host}:{self.port}")
+            
         except Exception as e:
-            self.logger.exception(f"Error invoking internal command '{command_text}': {e}")
-            try:
-                await cmdmgr.send_channel_message(channel, f"Error running command '{command_text}': {e}")
-            except Exception:
-                self.logger.error("Failed to send error message to channel after invocation failure.")
-
-    def send_scheduled_message(self, channel: str, message: str):
-        """Send a scheduled message (synchronous wrapper for schedule library)"""
-        current_time = self.get_current_time()
-        self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
-
-        # If message is explicitly meant to be an internal bot command use prefix 'cmd:'
-        msg_strip = message.lstrip()
-        lower_prefix = msg_strip[:4].lower()
-        if lower_prefix == 'cmd:':
-            command_text = msg_strip[4:].strip()
-            if command_text:
-                # Run the internal command via command_manager using simplified approach
+            self.logger.error(f"Failed to start web viewer: {e}")
+    
+    def stop_viewer(self):
+        """Stop the web viewer"""
+        if not self.running and not self.viewer_process:
+            return
+        
+        try:
+            self.running = False
+            
+            if self.viewer_process and self.viewer_process.poll() is None:
+                self.logger.info("Stopping web viewer...")
                 try:
-                    # Create a new event loop for this thread if one doesn't exist
+                    # First try graceful termination
+                    self.viewer_process.terminate()
+                    self.viewer_process.wait(timeout=5)
+                    self.logger.info("Web viewer stopped gracefully")
+                except subprocess.TimeoutExpired:
+                    self.logger.warning("Web viewer did not stop gracefully, forcing termination")
                     try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-
-                    loop.run_until_complete(self._invoke_internal_command_async(channel, command_text))
+                        self.viewer_process.kill()
+                        self.viewer_process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self.logger.error("Failed to kill web viewer process")
+                    except Exception as e:
+                        self.logger.warning(f"Error during forced termination: {e}")
                 except Exception as e:
-                    self.logger.exception(f"Failed to run scheduled internal command '{command_text}': {e}")
+                    self.logger.warning(f"Error during web viewer shutdown: {e}")
+                finally:
+                    self.viewer_process = None
             else:
-                # No command after prefix — send informative message
-                try:
-                    # Create a new event loop for this thread if one doesn't exist
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-
-                    loop.run_until_complete(self._send_scheduled_message_async(channel, "No command specified after 'cmd:'."))
-                except Exception:
-                    self.logger.error("Failed to send error message for empty command")
-            return
-
-        # Regular (plain text) scheduled message -> send as-is
-        try:
-            # Create a new event loop for this thread if one doesn't exist
+                self.logger.info("Web viewer already stopped")
+            
+            # Additional cleanup: kill any remaining processes on the port
             try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+                import subprocess
+                # Check for 'lsof' availability on the system before running
+                if os.name == 'posix': # Only run on Unix-like systems (Linux, macOS)
+                    result = subprocess.run(['lsof', '-ti', f':{self.port}'], 
+                                        capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and result.stdout.strip():
+                        pids = result.stdout.strip().split('\n')
+                        for pid in pids:
+                            if pid.strip():
+                                try:
+                                    subprocess.run(['kill', '-9', pid.strip()], timeout=2)
+                                    self.logger.info(f"Killed remaining process {pid} on port {self.port}")
+                                except Exception as e:
+                                    self.logger.warning(f"Failed to kill process {pid}: {e}")
+            except Exception as e:
+                self.logger.debug(f"Port cleanup check failed: {e}")
+            
         except Exception as e:
-            self.logger.exception(f"Failed to send scheduled message: {e}")
-
-    async def _send_scheduled_message_async(self, channel: str, message: str):
-        """Send a scheduled message (async implementation)"""
+            self.logger.error(f"Error stopping web viewer: {e}")
+    
+    def _run_viewer(self):
+        """Run the web viewer in a separate process"""
         try:
-            # Try command_manager first, fall back to bot.send_message if available
-            if hasattr(self.bot, 'command_manager') and self.bot.command_manager:
-                await self.bot.command_manager.send_channel_message(channel, message)
-            elif hasattr(self.bot, 'send_message') and callable(self.bot.send_message):
-                await self.bot.send_message(channel, message)
-            else:
-                self.logger.error("No available method to send scheduled message")
-        except Exception as e:
-            self.logger.exception(f"Error sending scheduled message to {channel}: {e}")
-
-    def start(self):
-        """Start the scheduler in a separate thread"""
-        self.setup_scheduled_messages() # Call setup on start
-        self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
-        self.scheduler_thread.start()
-
-    def run_scheduler(self):
-        """Run the scheduler in a separate thread"""
-        self.logger.info("Scheduler thread started")
-        last_log_time = 0
-
-        while self.bot.connected:
-            current_time = self.get_current_time()
-
-            # Log current time every 5 minutes for debugging
-            if time.time() - last_log_time > 300:  # 5 minutes
-                self.logger.debug(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                last_log_time = time.time()
-
-            # Check for pending scheduled messages
-            # NOTE: Reduced logging for routine scheduler checks from info to debug
-            pending_jobs = schedule.get_jobs()
-            if pending_jobs:
-                self.logger.debug(f"Found {len(pending_jobs)} scheduled jobs")
-
-            # Check for interval-based advertising
-            self.check_interval_advertising()
-
-            schedule.run_pending()
-            time.sleep(1)
-
-        self.logger.info("Scheduler thread stopped")
-
-    def check_interval_advertising(self):
-        """Check if it's time to send an interval-based advert"""
-        try:
-            advert_interval_hours = self.bot.config.getint('Bot', 'advert_interval_hours', fallback=0)
-            if advert_interval_hours <= 0:
-                return  # Interval advertising disabled
-
-            current_time = time.time()
-
-            # Check if enough time has passed since last advert
-            if not hasattr(self.bot, 'last_advert_time') or self.bot.last_advert_time is None:
-                # First time, set the timer
-                self.bot.last_advert_time = current_time
+            # Get the path to the web viewer script
+            viewer_script = Path(__file__).parent / "app.py"
+            
+            # Build command
+            cmd = [
+                sys.executable,
+                str(viewer_script),
+                "--host", self.host,
+                "--port", str(self.port)
+            ]
+            
+            if self.debug:
+                cmd.append("--debug")
+            
+            # Start the viewer process
+            self.viewer_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Give it a moment to start up
+            time.sleep(2)
+            
+            # Check if it started successfully
+            if self.viewer_process and self.viewer_process.poll() is not None:
+                stdout, stderr = self.viewer_process.communicate()
+                self.logger.error(f"Web viewer failed to start. Return code: {self.viewer_process.returncode}")
+                if stderr:
+                    self.logger.error(f"Web viewer startup error: {stderr}")
+                if stdout:
+                    self.logger.error(f"Web viewer startup output: {stdout}")
+                self.viewer_process = None
                 return
-
-            time_since_last_advert = current_time - self.bot.last_advert_time
-            interval_seconds = advert_interval_hours * 3600  # Convert hours to seconds
-
-            if time_since_last_advert >= interval_seconds:
-                self.logger.info(f"Time for interval-based advert (every {advert_interval_hours} hours)")
-                self.send_interval_advert()
-                self.bot.last_advert_time = current_time
-
+            
+            # Web viewer is ready
+            self.logger.info("Web viewer integration ready for data streaming")
+            
+            # Monitor the process
+            while self.running and self.viewer_process and self.viewer_process.poll() is None:
+                time.sleep(1)
+            
+            if self.viewer_process and self.viewer_process.returncode != 0:
+                stdout, stderr = self.viewer_process.communicate()
+                self.logger.error(f"Web viewer process exited with code {self.viewer_process.returncode}")
+                if stderr:
+                    self.logger.error(f"Web viewer stderr: {stderr}")
+                if stdout:
+                    self.logger.error(f"Web viewer stdout: {stdout}")
+            elif self.viewer_process and self.viewer_process.returncode == 0:
+                self.logger.info("Web viewer process exited normally")
+                    
         except Exception as e:
-            self.logger.error(f"Error checking interval advertising: {e}")
-
-    def send_interval_advert(self):
-        """Send an interval-based advert (synchronous wrapper)"""
-        current_time = self.get_current_time()
-        self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
-
-        # Create a new event loop for this thread if one doesn't exist
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        # Run the async function in the event loop
-        loop.run_until_complete(self._send_interval_advert_async())
-
-    async def _send_interval_advert_async(self):
-        """Send an interval-based advert (async implementation)"""
-        try:
-            # Use the same advert functionality as the manual advert command
-            await self.bot.meshcore.commands.send_advert(flood=True)
-            self.logger.info("Interval-based flood advert sent successfully")
-        except Exception as e:
-            self.logger.error(f"Error sending interval-based advert: {e}")
-
-    def list_scheduled_messages(self):
-        """Return a list of currently scheduled messages for debugging"""
-        return [
-            f"{time_str} -> {channel}: {message}"
-            for time_str, (channel, message) in self.scheduled_messages.items()
-        ]
-       #20251121-1215
+            self.logger.error(f"Error running web viewer: {e}")
+        finally:
+            self.running = False
+    
+    def get_status(self):
+        """Get the current status of the web viewer"""
+        return {
+            'enabled': self.enabled,
+            'running': self.running,
+            'host': self.host,
+            'port': self.port,
+            'debug': self.debug,
+            'auto_start': self.auto_start,
+            'url': f"http://{self.host}:{self.port}" if self.running else None
+        }
+    
+    def restart_viewer(self):
+        """Restart the web viewer with rate limiting"""
+        current_time = time.time()
+        
+        # Rate limit restarts to prevent restart loops
+        if current_time - self.last_restart < 30:  # 30 seconds between restarts
+            self.logger.warning("Restart rate limited - too soon since last restart")
+            return
+        
+        if self.restart_count >= self.max_restarts:
+            self.logger.error(f"Maximum restart limit reached ({self.max_restarts}). Web viewer disabled.")
+            self.enabled = False
+            return
+        
+        self.restart_count += 1
+        self.last_restart = current_time
+        
+        self.logger.info(f"Restarting web viewer (attempt {self.restart_count}/{self.max_restarts})...")
+        self.stop_viewer()
+        time.sleep(3)  # Give it more time to stop
+        
+        self.start_viewer()
+    
+    def is_viewer_healthy(self):
+        """Check if the web viewer process is healthy"""
+        if not self.viewer_process:
+            return False
+        
+        # Check if process is still running
+        if self.viewer_process.poll() is not None:
+            return False
+        
+        return True
