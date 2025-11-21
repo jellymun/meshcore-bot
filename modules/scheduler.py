@@ -14,17 +14,17 @@ from typing import Dict
 
 class MessageScheduler:
     """Manages scheduled messages and timing"""
-
+    
     def __init__(self, bot):
         self.bot = bot
         self.logger = bot.logger
         self.scheduled_messages = {}
         self.scheduler_thread = None
-
+    
     def get_current_time(self):
         """Get current time in configured timezone"""
         timezone_str = self.bot.config.get('Bot', 'timezone', fallback='')
-
+        
         if timezone_str:
             try:
                 tz = pytz.timezone(timezone_str)
@@ -34,13 +34,13 @@ class MessageScheduler:
                 return datetime.datetime.now()
         else:
             return datetime.datetime.now()
-
+    
     def setup_scheduled_messages(self):
         """Setup scheduled messages from config"""
         if not self.bot.config.has_section('Scheduled_Messages'):
             self.logger.info("No Scheduled_Messages section found in config")
             return
-
+            
         self.logger.info("Found Scheduled_Messages section")
         for time_str, message_info in self.bot.config.items('Scheduled_Messages'):
             self.logger.info(f"Processing scheduled message: '{time_str}' -> '{message_info}'")
@@ -49,13 +49,13 @@ class MessageScheduler:
                 if not self._is_valid_time_format(time_str):
                     self.logger.warning(f"Invalid time format '{time_str}' for scheduled message: {message_info}")
                     continue
-
+                
                 channel, message = message_info.split(':', 1)
                 # Convert HHMM to HH:MM for scheduler
                 hour = int(time_str[:2])
                 minute = int(time_str[2:])
                 schedule_time = f"{hour:02d}:{minute:02d}"
-
+                
                 # NOTE: We use self.send_scheduled_message, which handles the async wrapping
                 schedule.every().day.at(schedule_time).do(
                     self.send_scheduled_message, channel.strip(), message.strip()
@@ -66,10 +66,10 @@ class MessageScheduler:
                 self.logger.warning(f"Invalid scheduled message format: {message_info}")
             except Exception as e:
                 self.logger.warning(f"Error setting up scheduled message '{time_str}': {e}")
-
+        
         # Setup interval-based advertising
         self.setup_interval_advertising()
-
+    
     def setup_interval_advertising(self):
         """Setup interval-based advertising from config"""
         try:
@@ -83,7 +83,7 @@ class MessageScheduler:
                 self.logger.info("Interval-based advertising disabled (advert_interval_hours = 0)")
         except Exception as e:
             self.logger.warning(f"Error setting up interval advertising: {e}")
-
+    
     def _is_valid_time_format(self, time_str: str) -> bool:
         """Validate time format (HHMM)"""
         try:
@@ -148,7 +148,7 @@ class MessageScheduler:
         """Send a scheduled message (synchronous wrapper for schedule library)"""
         current_time = self.get_current_time()
         self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
-
+        
         # If message is explicitly meant to be an internal bot command use prefix 'cmd:'
         msg_strip = message.lstrip()
         lower_prefix = msg_strip[:4].lower()
@@ -163,7 +163,7 @@ class MessageScheduler:
                     except RuntimeError:
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-
+                    
                     loop.run_until_complete(self._invoke_internal_command_async(channel, command_text))
                 except Exception as e:
                     self.logger.exception(f"Failed to run scheduled internal command '{command_text}': {e}")
@@ -176,7 +176,7 @@ class MessageScheduler:
                     except RuntimeError:
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-
+                    
                     loop.run_until_complete(self._send_scheduled_message_async(channel, "No command specified after 'cmd:'."))
                 except Exception:
                     self.logger.error("Failed to send error message for empty command")
@@ -190,11 +190,11 @@ class MessageScheduler:
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-
+            
             loop.run_until_complete(self._send_scheduled_message_async(channel, message))
         except Exception as e:
             self.logger.exception(f"Failed to send scheduled message: {e}")
-
+    
     async def _send_scheduled_message_async(self, channel: str, message: str):
         """Send a scheduled message (async implementation)"""
         try:
@@ -213,75 +213,75 @@ class MessageScheduler:
         self.setup_scheduled_messages() # Call setup on start
         self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.scheduler_thread.start()
-
+    
     def run_scheduler(self):
         """Run the scheduler in a separate thread"""
         self.logger.info("Scheduler thread started")
         last_log_time = 0
-
+        
         while self.bot.connected:
             current_time = self.get_current_time()
-
+            
             # Log current time every 5 minutes for debugging
             if time.time() - last_log_time > 300:  # 5 minutes
                 self.logger.debug(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 last_log_time = time.time()
-
+            
             # Check for pending scheduled messages
             # NOTE: Reduced logging for routine scheduler checks from info to debug
             pending_jobs = schedule.get_jobs()
             if pending_jobs:
                 self.logger.debug(f"Found {len(pending_jobs)} scheduled jobs")
-
+            
             # Check for interval-based advertising
             self.check_interval_advertising()
-
+            
             schedule.run_pending()
             time.sleep(1)
-
+        
         self.logger.info("Scheduler thread stopped")
-
+    
     def check_interval_advertising(self):
         """Check if it's time to send an interval-based advert"""
         try:
             advert_interval_hours = self.bot.config.getint('Bot', 'advert_interval_hours', fallback=0)
             if advert_interval_hours <= 0:
                 return  # Interval advertising disabled
-
+            
             current_time = time.time()
-
+            
             # Check if enough time has passed since last advert
             if not hasattr(self.bot, 'last_advert_time') or self.bot.last_advert_time is None:
                 # First time, set the timer
                 self.bot.last_advert_time = current_time
                 return
-
+            
             time_since_last_advert = current_time - self.bot.last_advert_time
             interval_seconds = advert_interval_hours * 3600  # Convert hours to seconds
-
+            
             if time_since_last_advert >= interval_seconds:
                 self.logger.info(f"Time for interval-based advert (every {advert_interval_hours} hours)")
                 self.send_interval_advert()
                 self.bot.last_advert_time = current_time
-
+                
         except Exception as e:
             self.logger.error(f"Error checking interval advertising: {e}")
-
+    
     def send_interval_advert(self):
         """Send an interval-based advert (synchronous wrapper)"""
         current_time = self.get_current_time()
         self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
-
+        
         # Create a new event loop for this thread if one doesn't exist
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-
+        
         # Run the async function in the event loop
         loop.run_until_complete(self._send_interval_advert_async())
-
+    
     async def _send_interval_advert_async(self):
         """Send an interval-based advert (async implementation)"""
         try:
@@ -297,4 +297,3 @@ class MessageScheduler:
             f"{time_str} -> {channel}: {message}"
             for time_str, (channel, message) in self.scheduled_messages.items()
         ]
-       #20251121-1215
