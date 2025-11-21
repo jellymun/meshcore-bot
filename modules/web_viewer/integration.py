@@ -9,6 +9,8 @@ import time
 import subprocess
 import sys
 import os
+import sqlite3 # Import added for database initialization
+import json # Import added for database initialization
 from pathlib import Path
 
 class BotIntegration:
@@ -19,34 +21,11 @@ class BotIntegration:
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
         self.is_shutting_down = False
-        
-        # Initialize the database and tables on class initialization
-        BotIntegration.create_tables('bot_data.db')
     
     def reset_circuit_breaker(self):
         """Reset the circuit breaker"""
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
-    
-    @staticmethod
-    def create_tables(db_path='bot_data.db'):
-        """Create tables in SQLite database if they do not exist"""
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Create packet_stream table
-        try:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS packet_stream (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    data TEXT NOT NULL,
-                    type TEXT NOT NULL
-                )
-            ''')
-            conn.commit()
-        except Exception as e:
-            print(f"Error creating table: {e}")
     
     def capture_full_packet_data(self, packet_data):
         """Capture full packet data and store in database for web viewer"""
@@ -167,7 +146,7 @@ class BotIntegration:
         except Exception as e:
             self.bot.logger.debug(f"Error storing routing data: {e}")
     
-    def cleanup_old_data(self, days_to_keep=7):
+    def cleanup_old_data(self, days_to_keep: int = 7):
         """Clean up old packet stream data to prevent database bloat"""
         try:
             import sqlite3
@@ -243,11 +222,43 @@ class WebViewerIntegration:
         self.max_restarts = 5
         self.last_restart = 0
         
+        # **NEW: Initialize the database and table structure**
+        self._initialize_database()
+
         # Initialize bot integration for compatibility
         self.bot_integration = BotIntegration(bot)
         
         if self.enabled and self.auto_start:
             self.start_viewer()
+
+    def _initialize_database(self):
+        """Initialize the SQLite database and required tables."""
+        db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+        self.logger.info(f"Initializing database at: {db_path}")
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # Create the packet_stream table if it doesn't exist
+            # This table stores all captured data (packets, commands, routing)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS packet_stream (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    data TEXT NOT NULL,
+                    type TEXT NOT NULL
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            self.logger.info("Database and packet_stream table ensured to exist.")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize database: {e}")
+            # Consider raising the exception or marking the integration as failed
+
     
     def start_viewer(self):
         """Start the web viewer in a separate thread"""
@@ -299,17 +310,19 @@ class WebViewerIntegration:
             # Additional cleanup: kill any remaining processes on the port
             try:
                 import subprocess
-                result = subprocess.run(['lsof', '-ti', f':{self.port}'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and result.stdout.strip():
-                    pids = result.stdout.strip().split('\n')
-                    for pid in pids:
-                        if pid.strip():
-                            try:
-                                subprocess.run(['kill', '-9', pid.strip()], timeout=2)
-                                self.logger.info(f"Killed remaining process {pid} on port {self.port}")
-                            except Exception as e:
-                                self.logger.warning(f"Failed to kill process {pid}: {e}")
+                # Check for 'lsof' availability on the system before running
+                if os.name == 'posix': # Only run on Unix-like systems (Linux, macOS)
+                    result = subprocess.run(['lsof', '-ti', f':{self.port}'], 
+                                        capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and result.stdout.strip():
+                        pids = result.stdout.strip().split('\n')
+                        for pid in pids:
+                            if pid.strip():
+                                try:
+                                    subprocess.run(['kill', '-9', pid.strip()], timeout=2)
+                                    self.logger.info(f"Killed remaining process {pid} on port {self.port}")
+                                except Exception as e:
+                                    self.logger.warning(f"Failed to kill process {pid}: {e}")
             except Exception as e:
                 self.logger.debug(f"Port cleanup check failed: {e}")
             
@@ -422,5 +435,3 @@ class WebViewerIntegration:
             return False
         
         return True
-
-#--- End of integration.py ---
