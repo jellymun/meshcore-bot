@@ -19,11 +19,34 @@ class BotIntegration:
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
         self.is_shutting_down = False
+        
+        # Initialize the database and tables on class initialization
+        BotIntegration.create_tables('bot_data.db')
     
     def reset_circuit_breaker(self):
         """Reset the circuit breaker"""
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
+    
+    @staticmethod
+    def create_tables(db_path='bot_data.db'):
+        """Create tables in SQLite database if they do not exist"""
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create packet_stream table
+        try:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS packet_stream (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    data TEXT NOT NULL,
+                    type TEXT NOT NULL
+                )
+            ''')
+            conn.commit()
+        except Exception as e:
+            print(f"Error creating table: {e}")
     
     def capture_full_packet_data(self, packet_data):
         """Capture full packet data and store in database for web viewer"""
@@ -144,7 +167,7 @@ class BotIntegration:
         except Exception as e:
             self.bot.logger.debug(f"Error storing routing data: {e}")
     
-    def cleanup_old_data(self, days_to_keep: int = 7):
+    def cleanup_old_data(self, days_to_keep=7):
         """Clean up old packet stream data to prevent database bloat"""
         try:
             import sqlite3
@@ -399,3 +422,5 @@ class WebViewerIntegration:
             return False
         
         return True
+
+#--- End of integration.py ---
