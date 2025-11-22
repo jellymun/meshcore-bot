@@ -21,11 +21,57 @@ class BotIntegration:
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
         self.is_shutting_down = False
+        # Initialize the packet_stream table
+        self._init_packet_stream_table()
     
     def reset_circuit_breaker(self):
         """Reset the circuit breaker"""
         self.circuit_breaker_open = False
         self.circuit_breaker_failures = 0
+    
+    def _init_packet_stream_table(self):
+        """Initialize the packet_stream table in bot_data.db"""
+        try:
+            import sqlite3
+            
+            # Get database path from config
+            db_path = self.bot.config.get('Database', 'path', fallback='bot_data.db')
+            
+            # Connect to database and create table if it doesn't exist
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Create packet_stream table with schema matching the INSERT statements
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS packet_stream (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    data TEXT NOT NULL,
+                    type TEXT NOT NULL
+                )
+            ''')
+            
+            # Create index on timestamp for faster queries
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_packet_stream_timestamp 
+                ON packet_stream(timestamp)
+            ''')
+            
+            # Create index on type for filtering by type
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_packet_stream_type 
+                ON packet_stream(type)
+            ''')
+            
+            conn.commit()
+            conn.close()
+            
+            self.bot.logger.info(f"Initialized packet_stream table in {db_path}")
+            
+        except Exception as e:
+            self.bot.logger.error(f"Failed to initialize packet_stream table: {e}")
+            # Don't raise - allow bot to continue even if table init fails
+            # The error will be caught when trying to insert data
     
     def capture_full_packet_data(self, packet_data):
         """Capture full packet data and store in database for web viewer"""

@@ -25,8 +25,8 @@ class CatfactCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         
-        # Collection of cat facts
-        self.cat_facts = [
+        # Collection of cat facts - fallback if translations not available
+        self.cat_facts_fallback = [
             "Cats have a third eyelid called a nictitating membrane that protects and moistens their eyes. 🐱",
             "A group of cats is called a 'clowder' or a 'glaring'. 🐈",
             "Cats can rotate their ears 180 degrees independently to pinpoint sounds. 👂",
@@ -97,6 +97,13 @@ class CatfactCommand(BaseCommand):
             "A cat's average body temperature is 101.5°F (38.6°C) - higher than humans. 🌡️"
         ]
     
+    def get_cat_facts(self) -> list:
+        """Get cat facts from translations or fallback to hardcoded list"""
+        facts = self.translate_get_value('commands.catfact.facts')
+        if facts and isinstance(facts, list) and len(facts) > 0:
+            return facts
+        return self.cat_facts_fallback
+    
     def get_help_text(self) -> str:
         # Return empty string so it doesn't appear in help
         return ""
@@ -146,8 +153,11 @@ class CatfactCommand(BaseCommand):
             # Record execution for this user
             self._record_execution(message.sender_id)
             
+            # Get cat facts from translations or fallback
+            cat_facts = self.get_cat_facts()
+            
             # Get a random cat fact
-            cat_fact = random.choice(self.cat_facts)
+            cat_fact = random.choice(cat_facts)
             
             # Send the cat fact
             await self.send_response(message, cat_fact)
@@ -155,5 +165,5 @@ class CatfactCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error in cat fact command: {e}")
-            await self.send_response(message, "Meow? Something went wrong getting your cat fact! 🐱")
+            await self.send_response(message, self.translate('commands.catfact.error'))
             return True

@@ -21,7 +21,7 @@ class AdvertCommand(BaseCommand):
     category = "special"
     
     def get_help_text(self) -> str:
-        return self.description
+        return self.translate('commands.advert.description')
     
     def can_execute(self, message: MeshMessage) -> bool:
         """Check if advert command can be executed"""
@@ -45,7 +45,7 @@ class AdvertCommand(BaseCommand):
             if hasattr(self.bot, 'last_advert_time') and self.bot.last_advert_time and (current_time - self.bot.last_advert_time) < 3600:
                 remaining_time = 3600 - (current_time - self.bot.last_advert_time)
                 remaining_minutes = int(remaining_time // 60)
-                response = f"Advert cooldown active. Please wait {remaining_minutes} more minutes before requesting another advert."
+                response = self.translate('commands.advert.cooldown_active', minutes=remaining_minutes)
                 await self.send_response(message, response)
                 return True
             
@@ -58,14 +58,14 @@ class AdvertCommand(BaseCommand):
             if hasattr(self.bot, 'last_advert_time'):
                 self.bot.last_advert_time = current_time
             
-            response = "Flood advert sent successfully!"
+            response = self.translate('commands.advert.success')
             self.logger.info("Flood advert sent successfully via DM command")
             
             await self.send_response(message, response)
             return True
             
         except Exception as e:
-            error_msg = f"Error sending flood advert: {e}"
-            self.logger.error(error_msg)
+            error_msg = self.translate('commands.advert.error', error=str(e))
+            self.logger.error(f"Error sending flood advert: {e}")
             await self.send_response(message, error_msg)
             return False

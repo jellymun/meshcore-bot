@@ -1,0 +1,1020 @@
+{
+    "keywords": {
+        "help": [
+            "help"
+        ],
+        "ping": [
+            "ping"
+        ],
+        "test": [
+            "test",
+            "t"
+        ],
+        "wx": [
+            "wx",
+            "weather",
+            "wxa",
+            "wxalert"
+        ],
+        "gwx": [
+            "gwx",
+            "globalweather",
+            "gwxa"
+        ],
+        "aqi": [
+            "aqi",
+            "air",
+            "airquality",
+            "air_quality"
+        ],
+        "solar": [
+            "solar"
+        ],
+        "sun": [
+            "sun"
+        ],
+        "moon": [
+            "moon"
+        ],
+        "hfcond": [
+            "hfcond",
+            "hf"
+        ],
+        "satpass": [
+            "satpass"
+        ],
+        "sports": [
+            "sports",
+            "score",
+            "scores"
+        ],
+        "stats": [
+            "stats"
+        ],
+        "channels": [
+            "channels",
+            "channel"
+        ],
+        "path": [
+            "path",
+            "decode",
+            "route"
+        ],
+        "prefix": [
+            "prefix",
+            "repeater",
+            "lookup"
+        ],
+        "repeater": [
+            "repeater",
+            "repeaters",
+            "rp"
+        ],
+        "solarforecast": [
+            "sf",
+            "solarforecast"
+        ],
+        "dice": [
+            "dice"
+        ],
+        "roll": [
+            "roll"
+        ],
+        "joke": [
+            "joke",
+            "jokes"
+        ],
+        "dadjoke": [
+            "dadjoke",
+            "dad joke",
+            "dadjokes",
+            "dad jokes"
+        ],
+        "catfact": [
+            "catfact",
+            "cat",
+            "meow",
+            "purr",
+            "kitten"
+        ],
+        "hacker": [
+            "hacker",
+            "sudo",
+            "ps aux",
+            "grep",
+            "ls -l",
+            "ls -la",
+            "echo $PATH"
+        ],
+        "hello": [
+            "hello",
+            "hi",
+            "hey",
+            "howdy",
+            "greetings",
+            "salutations",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "good night",
+            "yo",
+            "sup",
+            "whats up",
+            "what's up",
+            "morning",
+            "afternoon",
+            "evening",
+            "night",
+            "gday",
+            "g'day",
+            "hola",
+            "bonjour",
+            "ciao",
+            "namaste",
+            "aloha",
+            "shalom",
+            "konnichiwa",
+            "guten tag",
+            "buenos dias",
+            "buenas tardes",
+            "buenas noches"
+        ],
+        "webviewer": [
+            "webviewer",
+            "web",
+            "viewer",
+            "wv"
+        ],
+        "cmd": [
+            "cmd",
+            "commands"
+        ],
+        "advert": [
+            "advert"
+        ]
+    },
+    "commands": {
+        "help": {
+            "description": "Affiche les commandes. 'help <commande>' pour détails.",
+            "general": "**Aide Bot MeshCore**\n\n**Commandes disponibles:**\n{commands_list}",
+            "unknown": "**Commande inconnue: '{command}'**\n\nCommandes disponibles:\n{available}",
+            "specific": "**Aide pour '{command}':**\n{help_text}",
+            "no_help": "Aucune aide disponible",
+            "usage_examples": "\n**Exemples d'utilisation:**\n• `help @` - Aide pour syntaxe @{string}\n• `help t` - Aide pour syntaxe t {string}\n• `help advert` - Aide pour commande advert\n• `help test` - Aide pour commande test\n• `help ping` - Aide pour commande ping",
+            "custom_syntax": "\n**Syntaxe personnalisée:**\n• `t phrase` - Accusé de réception avec phrase (canaux & MP)\n• `@{string}` - Accusé de réception avec chaîne (MP uniquement)\n• `advert` - Envoyer annonce flood (MP uniquement, délai 1h)"
+        },
+        "ping": {
+            "description": "Répond à 'ping' avec 'Pong!'",
+            "response": "Pong!"
+        },
+        "test": {
+            "description": "Répond à 'test' ou 't' avec infos connexion",
+            "help": "Répond à 'test' ou 't' avec infos connexion"
+        },
+        "wx": {
+            "description": "Météo pour un code postal (usage: wx 12345)",
+            "usage": "Usage: wx <codepostal|ville> - Exemple: wx 12345 ou wx paris ou wx lille",
+            "error_fetching": "Erreur récupération données météo NOAA",
+            "no_location_zipcode": "Localisation introuvable pour code postal {location}",
+            "no_location_city": "Ville '{location}' introuvable dans {state}",
+            "error": "Erreur données météo: {error}",
+            "alerts": "{count} alertes: {text}",
+            "tomorrow_not_available": "Tomorrow's forecast not available",
+            "tomorrow_error": "Error formatting tomorrow's forecast",
+            "multiday_not_available": "{num_days}-day forecast not available",
+            "multiday_error": "Error formatting {num_days}-day forecast"
+        },
+        "gwx": {
+            "description": "Météo mondiale pour tout lieu (usage: gwx Tokyo)",
+            "help": "Usage: gwx <lieu> - Météo mondiale (ville, pays ou coordonnées)",
+            "usage": "Usage: gwx <lieu> - Exemple: gwx Tokyo ou gwx Paris, France",
+            "error_fetching": "Erreur récupération données météo",
+            "error_fetching_api": "Erreur récupération données Open-Meteo",
+            "no_location": "Lieu '{location}' introuvable",
+            "error": "Erreur données météo: {error}",
+            "tomorrow_not_available": "Tomorrow's forecast not available",
+            "tomorrow_error": "Error formatting tomorrow's forecast",
+            "multiday_not_available": "{num_days}-day forecast not available",
+            "multiday_error": "Error formatting {num_days}-day forecast",
+            "periods": {
+                "today": "Aujourd'hui",
+                "tonight": "Ce soir",
+                "tomorrow": "Demain"
+            },
+            "weather_descriptions": {
+                "0": "Dégagé",
+                "1": "Plutôt dégagé",
+                "2": "Partiellement nuageux",
+                "3": "Couvert",
+                "45": "Brouillard",
+                "48": "Brouillard",
+                "51": "Bruine légère",
+                "53": "Bruine",
+                "55": "Bruine forte",
+                "56": "Bruine verglaçante légère",
+                "57": "Bruine verglaçante",
+                "61": "Pluie légère",
+                "63": "Pluie",
+                "65": "Pluie forte",
+                "66": "Pluie verglaçante légère",
+                "67": "Pluie verglaçante",
+                "71": "Neige légère",
+                "73": "Neige",
+                "75": "Neige forte",
+                "77": "Grains de neige",
+                "80": "Averses légères",
+                "81": "Averses",
+                "82": "Averses fortes",
+                "85": "Averses neige légères",
+                "86": "Averses de neige",
+                "95": "Orage",
+                "96": "Orage avec grêle",
+                "99": "Orage violent",
+                "unknown": "Inconnu"
+            },
+            "warnings": {
+                "extreme_heat": "⚠️ Chaleur extrême",
+                "extreme_cold": "⚠️ Froid extrême",
+                "heavy_rain": "⚠️ Pluie forte",
+                "thunderstorms": "⚠️ Orages",
+                "heavy_snow": "⚠️ Neige forte",
+                "high_winds": "⚠️ Vents forts ({wind_speed} mph)"
+            }
+        },
+        "sports": {
+            "description": "Scores et calendriers sportifs (usage: sports [équipe/ligue])",
+            "help": "Scores et calendriers. 'sports' pour équipes par défaut, 'sports [équipe]' pour équipe spécifique, 'sports [ligue]' pour matchs.",
+            "error_fetching": "Erreur récupération données sportives",
+            "error_fetching_league": "Erreur récupération données {sport}",
+            "error_fetching_team": "Erreur récupération données pour {team}",
+            "no_default_teams": "Aucune équipe par défaut configurée",
+            "no_games_default": "Aucun match pour équipes par défaut",
+            "no_teams_city": "Aucune équipe trouvée pour {city}",
+            "no_games_city": "Aucun match pour équipes de {city}",
+            "no_games_league": "Aucun match trouvé pour {sport}",
+            "no_games_team": "Aucun match trouvé pour {team}",
+            "team_not_found": "Équipe/Ligue '{team}' introuvable. Essayez: seahawks, mariners, sounders, kraken, storm, chiefs, lfc, mlb, nfl, mls, wnba, epl, etc."
+        },
+        "stats": {
+            "description": "Stats des dernières 24h. 'stats messages', 'stats channels' ou 'stats paths' pour stats spécifiques.",
+            "help": "Stats bot 24h. Commandes: 'stats' (basique), 'stats messages' (utilisateurs), 'stats channels' (activité canaux), 'stats paths' (chemins longs)",
+            "disabled": "Commande stats désactivée",
+            "unknown_subcommand": "Inconnu: {subcommand}. Utilisez 'stats', 'stats messages', 'stats channels' ou 'stats paths'",
+            "error": "Erreur récupération stats: {error}",
+            "error_bot_users": "Erreur stats utilisateurs: {error}",
+            "error_channels": "Erreur stats canaux: {error}",
+            "error_paths": "Erreur stats chemins: {error}",
+            "basic": {
+                "header": "Stats Bot (24h):",
+                "commands": "Cmds: {count} | Réponses: {replies}",
+                "top_command": "Top cmd: {command}",
+                "top_user": "Top utilisateur: {user}",
+                "none": "Aucun"
+            },
+            "users": {
+                "header": "Utilisateurs Bot (24h):",
+                "none": "Aucun utilisateur bot"
+            },
+            "channels": {
+                "header": "Top Canaux (24h)",
+                "none": "Aucune activité canal",
+                "msg_singular": "msg",
+                "msg_plural": "msgs",
+                "user_singular": "utilisateur",
+                "user_plural": "utilisateurs",
+                "format": "{rank}. {channel}: {msg_count} {msg_text} | {user_count} {user_text}"
+            },
+            "paths": {
+                "none": "Aucune donnée chemin",
+                "format": "{rank} {sender} {path}"
+            }
+        },
+        "solarforecast": {
+            "description": "Prévision production solaire (usage: sf <lieu|nom_répéteur|coordonnées|codepostal> [taille_panneau] [azimut, 0=sud] [angle])",
+            "usage": "Usage: sf <lieu|nom_répéteur|coordonnées|codepostal> [watts] [azimut, 0=sud] [angle] - Ex: sf paris 10 0 37",
+            "usage_short": "Usage: sf <lieu|nom_répéteur|coordonnées|codepostal> [W] [azimut] [angle] - Ex: sf paris 10",
+            "panel_size_range": "Taille panneau doit être 1-1000W",
+            "azimuth_range": "Azimut doit être -180 à 180 (0=sud)",
+            "angle_range": "Angle doit être 0-90 degrés",
+            "no_location": "Lieu introuvable: {location}",
+            "error_fetching": "Erreur récupération prévision",
+            "no_data": "Aucune donnée prévision",
+            "error": "Erreur: {error}",
+            "rate_limit": "Limite atteinte: Réessayez dans 5 min",
+            "labels": {
+                "today": "Auj:{wh:.0f}Wh",
+                "tomorrow": "Demain:{wh:.0f}Wh",
+                "day_format": "{day}:{wh:.0f}Wh",
+                "peak": "Pic: {watts:.0f}W@{time}",
+                "peak_past": "Pic: {watts:.0f}W (passé)",
+                "hours_util": " ({hours}h,{util:.0f}%util)",
+                "hours_percent": " ({hours}h,{percent:.0f}%)",
+                "hours_only": " ({hours}h)",
+                "separator": " | "
+            }
+        },
+        "advert": {
+            "description": "Envoie annonce flood (MP uniquement, délai 1h)",
+            "cooldown_active": "Délai annonce actif. Attendez {minutes} min avant nouvelle demande.",
+            "success": "Annonce flood envoyée!",
+            "error": "Erreur envoi annonce flood: {error}"
+        },
+        "path": {
+            "description": "Décode données chemin hexa pour afficher répéteurs impliqués dans routage message",
+            "help": "Path: path [hex] - Décode chemin pour afficher répéteurs. !path seul pour chemin message récent, ou path [7e,01] pour chemin spécifique.",
+            "no_valid_hex": "❌ Aucune valeur hexa valide dans données chemin. Format: 11,98,a4,49,cd,5f,01",
+            "no_path": "❌ Aucune info chemin disponible dans message actuel",
+            "error": "Erreur traitement chemin: {error}",
+            "error_decoding": "❌ Erreur décodage chemin: {error}",
+            "error_extracting": "❌ Erreur extraction chemin message actuel: {error}",
+            "path_prefix": "📡 Chemin: {path_string}",
+            "direct_connection": "📡 Connexion directe (0 saut)",
+            "node_format": "{node_id}: {name}",
+            "node_unknown": "{node_id}: Inconnu",
+            "node_collision": "{node_id}: {matches} répéteurs",
+            "node_geographic": "{node_id}: {name} {confidence}",
+            "continuation_start": "...\n{line}",
+            "continuation_end": "\n...",
+            "truncation": "...",
+            "unknown_name": "Inconnu"
+        },
+        "prefix": {
+            "description": "Recherche répéteurs par préfixe 2 caractères (ex: 'prefix 1A')",
+            "help_api": "Recherche répéteurs par préfixe{location_note}. Usage: 'prefix 1A', 'prefix 1A all', 'prefix free'.",
+            "help_no_api": "Recherche répéteurs par préfixe{location_note}. Usage: 'prefix 1A', 'prefix 1A all', 'prefix free'. (DB locale uniquement)",
+            "location_note": " (avec noms villes)",
+            "refresh_not_available": "❌ Actualisation indisponible - aucune URL API configurée. Base locale uniquement.",
+            "cache_refreshed": "🔄 Cache préfixe répéteur actualisé!",
+            "unable_determine_free": "❌ Impossible déterminer préfixes libres. Essayez 'prefix refresh' d'abord.",
+            "invalid_format": "❌ Format préfixe invalide. Utilisez 2 caractères (ex: prefix 1A)",
+            "no_repeaters_found": "❌ Aucun répéteur trouvé avec préfixe '{prefix}'",
+            "no_free_prefixes": "❌ Aucun préfixe libre (254 préfixes valides utilisés)",
+            "available_prefixes": "Préfixes disponibles ({shown} sur {total} libres):",
+            "generate_key": "💡 Générer clé perso: https://gessaman.com/mc-keygen",
+            "prefix_db_all": "Préfixe {prefix}: {count} répéteur{plural}",
+            "prefix_db_recent": "Préfixe {prefix}: {count} répéteur{plural} ({days})",
+            "prefix_api": "📡 Préfixe {prefix} ({count} répéteur{plural}):",
+            "item_format": "{index}. {name}",
+            "source_domain": "Source: {domain}",
+            "source_api": "Source: API",
+            "device_repeater": " (Répéteur)",
+            "device_roomserver": " (Serveur salle)"
+        },
+        "repeater": {
+            "description": "Gérer contacts répéteur et opérations purge (MP uniquement)",
+            "admin_only": "Commande répéteur nécessite accès admin"
+        },
+        "aqi": {
+            "description": "Indice qualité air pour lieu (usage: aqi paris, aqi lyon, aqi vancouver canada, aqi 47.6,-122.3, ou aqi help)",
+            "usage": "Usage: aqi <ville|quartier|ville pays|lat,lon> - Ex: aqi paris, aqi lyon, aqi vancouver canada, ou aqi 47.6,-122.3",
+            "usage_help": "Usage: aqi <ville|quartier|ville pays|lat,lon|help> - IQA pour ville/quartier en {state}, villes internationales, coordonnées, ou aide polluants",
+            "error_fetching": "Erreur récupération données IQA",
+            "error_fetching_openmeteo": "Erreur récupération données IQA OpenMeteo",
+            "no_data": "Aucune donnée IQA disponible",
+            "no_location": "Lieu introuvable: {location}",
+            "no_location_city": "Ville '{location}' introuvable dans {state}",
+            "no_location_city_international": "Ville '{location}' introuvable",
+            "no_location_zipcode": "Code postal '{zipcode}' introuvable",
+            "error": "Erreur récupération données IQA: {error}",
+            "error_geocoding_zipcode": "Erreur géocodage code postal: {error}",
+            "error_formatting": "Erreur formatage données IQA",
+            "invalid_latitude": "Latitude invalide: {lat}. Doit être entre -90 et 90.",
+            "invalid_longitude": "Longitude invalide: {lon}. Doit être entre -180 et 180.",
+            "invalid_coordinates_format": "Format coordonnées invalide: {location}. Format: lat,lon (ex: 47.6,-122.3)",
+            "pollutant_help": "Aide IQA: PM2.5=particules fines, PM10=grossières, O3=ozone, NO2=dioxyde azote, CO=monoxyde carbone, SO2=dioxyde soufre",
+            "categories": {
+                "good": "Bon",
+                "moderate": "Moyen",
+                "unhealthy_sensitive": "Mauvais pour groupes sensibles",
+                "unhealthy": "Mauvais",
+                "very_unhealthy": "Très mauvais",
+                "hazardous": "Dangereux",
+                "fair": "Acceptable",
+                "poor": "Médiocre",
+                "very_poor": "Très médiocre",
+                "na": "N/D"
+            },
+            "astronomical": {
+                "sun": "L'IQA du Soleil est hors échelle! Vent solaire et éjections masse coronale font paraître l'air terrestre pur. ☀️",
+                "moon": "Vous aimez respirer du régolithe? La Lune n'a pas d'atmosphère, donc IQA parfait (si vous respirez le vide). 🌙",
+                "the_moon": "Vous aimez respirer du régolithe? La Lune n'a pas d'atmosphère, donc IQA parfait (si vous respirez le vide). 🌙",
+                "mercury": "Atmosphère de Mercure si fine qu'elle est quasi-vide. IQA: Parfait, si vous survivez aux écarts de 430°C. ☿️",
+                "venus": "Vénus a atmosphère 96% CO2 avec nuages acide sulfurique. IQA: Dangereux est un euphémisme. ♀️",
+                "earth": "L'IQA Terre varie selon lieu. Essayez ville ou coordonnées spécifiques! 🌍",
+                "mars": "Mars a fine atmosphère CO2 avec tempêtes poussière. IQA: Bon généralement, mais tempêtes brutales. ♂️",
+                "jupiter": "Jupiter est géante gazeuse sans surface solide. IQA: N/D (pression atmosphérique vous écraserait d'abord). ♃",
+                "saturn": "Atmosphère Saturne surtout hydrogène et hélium. IQA: Parfait, si vous survivez pression et froid. ♄",
+                "uranus": "Uranus a méthane dans atmosphère. IQA: Sent les pets, mais au moins pas toxique. ♅",
+                "neptune": "Atmosphère Neptune a méthane et sulfure hydrogène. IQA: Sent œufs pourris, mais vous gèleriez d'abord. ♆",
+                "pluto": "Atmosphère Pluton surtout azote avec méthane. IQA: Bon, mais si froid que poumons gèleraient. ♇",
+                "europa": "Europa a fine atmosphère oxygène. IQA: Excellent, mais vous gèleriez dans vide spatial. 🌑",
+                "titan": "Titan a épaisse atmosphère azote avec méthane. IQA: Respirable, mais -180°C et pluie méthane liquide. 🪐",
+                "io": "Io a fine atmosphère dioxyde soufre d'activité volcanique. IQA: Toxique, mais radiations vous tueraient d'abord. 🌋",
+                "ganymede": "Ganymède a fine atmosphère oxygène. IQA: Bon, mais vous gèleriez dans vide spatial. 🛸",
+                "callisto": "Callisto a fine atmosphère dioxyde carbone. IQA: Correct, mais -140°C et vous êtes dans l'espace. ❄️",
+                "enceladus": "Encelade a vapeur eau des geysers. IQA: Parfait, mais vous gèleriez instantanément dans l'espace. 💧",
+                "triton": "Triton a fine atmosphère azote. IQA: Bon, mais -235°C et vous êtes dans espace lointain. 🥶",
+                "space": "L'espace n'a pas d'atmosphère, donc IQA parfait! N'oubliez juste pas votre scaphandre. 🚀",
+                "void": "Vide spatial a excellente qualité air - zéro polluant! Pensez juste à apporter votre propre air. 🌌",
+                "black_hole": "Trous noirs n'ont pas d'atmosphère, mais forces marées seraient problème plus grand que qualité air. 🕳️",
+                "asteroid": "Astéroïdes n'ont pas d'atmosphère, donc IQA parfait! Attention au vide spatial. ☄️",
+                "comet": "Comètes ont fines atmosphères vapeur eau et poussière. IQA: Variable, mais vous gèleriez dans espace. ☄️"
+            }
+        },
+        "solar": {
+            "description": "Conditions solaires et état bandes HF",
+            "response": "☀️ Solaire: {info}",
+            "error": "Erreur infos solaires: {error}",
+            "labels": {
+                "a_index": "Indice-A",
+                "k_index": "Indice-K",
+                "sunspots": "Taches",
+                "xray_flux": "Flux rayon-X",
+                "solar_flux": "Flux solaire",
+                "signal_noise": "Bruit signal",
+                "error_fetching": "Erreur récupération données",
+                "no_xray_data": "Aucune donnée rayon-X",
+                "not_configured": "non configuré, contactez votre sysop"
+            },
+            "condensed_format": "A:{a_index} K:{k_index} Taches:{sunspots} Flux:{solar_flux} Xray:{xray_flux} Bruit:{signal_noise}"
+        },
+        "sun": {
+            "description": "Heures lever/coucher soleil",
+            "help": "Heures lever/coucher soleil et position soleil",
+            "response": "☀️ Infos Soleil:\n{info}",
+            "error": "Erreur infos soleil: {error}",
+            "labels": {
+                "sunset": "Coucher",
+                "sunrise": "Lever",
+                "rise": "Lever",
+                "set": "Coucher",
+                "daylight": "Jour",
+                "remaining": "Restant",
+                "azimuth": "Azimut",
+                "altitude": "Altitude"
+            }
+        },
+        "moon": {
+            "description": "Phase lune et heures lever/coucher",
+            "error": "Erreur infos lune: {error}",
+            "format": "🌙 {phase} {illum}\nLever:{rise} Coucher:{set}",
+            "format_with_dates": "🌙 {phase} {illum}\nLever:{rise} Coucher:{set}\nPleine:{full} Nouvelle:{new}",
+            "fallback": "🌙 {info}",
+            "unknown_phase": "Inconnue",
+            "unknown_illum": "N/D",
+            "labels": {
+                "moonrise": "Lever",
+                "set": "Coucher",
+                "phase": "Phase",
+                "fullmoon": "Pleine",
+                "newmoon": "Nouvelle",
+                "az": "Az",
+                "alt": "Alt"
+            },
+            "phases": {
+                "new_moon": "Nouvelle lune🌑",
+                "waxing_crescent": "Premier croissant🌒",
+                "first_quarter": "Premier quartier🌓",
+                "waxing_gibbous": "Gibbeuse croissante🌔",
+                "full_moon": "Pleine lune🌕",
+                "waning_gibbous": "Gibbeuse décroissante🌖",
+                "last_quarter": "Dernier quartier🌗",
+                "waning_crescent": "Dernier croissant🌘"
+            }
+        },
+        "hfcond": {
+            "description": "Conditions propagation HF",
+            "help": "Conditions bandes HF pour radio amateur",
+            "header": "📡 Conditions bandes HF:\n{info}",
+            "error": "Erreur conditions HF: {error}"
+        },
+        "satpass": {
+            "description": "Infos passage satellite: satpass <numéro_NORAD_ou_raccourci> [visual]",
+            "help": "Prédictions passages satellite",
+            "header": "🛰️ Passage satellite:\n{pass_info}",
+            "error": "Erreur infos passage satellite: {error}",
+            "no_satellite": "Fournissez numéro NORAD satellite ou raccourci. Ex: satpass iss",
+            "help_header": "🛰️ Infos passage satellite\n\nUsage: satpass <numéro_NORAD_ou_raccourci>\n\nRaccourcis:\n",
+            "category_weather": "🌤️ Météo: ",
+            "category_stations": "🚀 Stations: ",
+            "category_telescopes": "🔭 Télescopes: ",
+            "category_other": "🛰️ Autres: ",
+            "examples": "\nExemples:\n• satpass iss\n• satpass noaa15\n• satpass 25544\n• satpass 27607 visual (passages visuels uniquement)",
+            "labels": {
+                "geostationary": "{satname} semble géostationnaire ou a données passage invalides. Satellites géostationnaires n'ont pas passages classiques - position fixe par rapport Terre.",
+                "no_passes": "{satname} n'a aucun passage {pass_type} dans 10 jours depuis ce lieu",
+                "invalid_norad": "Fournissez NORAD# ex: 🛰️satpass 25544,33591"
+            }
+        },
+        "channels": {
+            "description": "Lister ou gérer canaux",
+            "help": "Liste canaux hashtag avec sous-catégories. 'channels' pour général, 'channels list' pour toutes catégories, 'channels <catégorie>' pour catégories spécifiques, 'channels #canal' pour infos canal.",
+            "no_channels_for_category": "Aucun canal configuré pour '{category}'. 'channels' pour canaux généraux.",
+            "no_channels_configured": "Aucun canal configuré. Contactez admin pour ajouter canaux.",
+            "error_retrieving_channels": "Erreur récupération canaux: {error}",
+            "no_categories_configured": "Aucune catégorie canal configurée.",
+            "error_retrieving_categories": "Erreur récupération catégories: {error}",
+            "no_description_available": "Aucune description disponible",
+            "channel_not_found": "Canal {channel} introuvable. 'channels list' pour voir canaux disponibles.",
+            "error_retrieving_channel_info": "Erreur récupération infos canal: {error}",
+            "no_category_channels": "Aucun canal {category} configuré",
+            "headers": {
+                "common_channels": "Canaux courants: ",
+                "common_channels_cont": "Canaux courants: ",
+                "available_categories": "Catégories disponibles: ",
+                "channels_cont": "Canaux (suite): ",
+                "category": "{category}: ",
+                "category_channels": "Canaux {category}: "
+            },
+            "category_count": "{category} ({count} canaux)"
+        },
+        "dice": {
+            "description": "Lancer dés (usage: dice [faces] ou dice [nombre]d[faces])",
+            "help": "Lancer dés. 'dice' pour d6, 'dice d20' pour d20, 'dice 2d6' pour 2d6, etc.",
+            "invalid_dice_type": "Type dé invalide. Disponibles: {available}",
+            "single_die": "🎲 d{sides}: {result}",
+            "multiple_dice": "🎲 {count}d{sides}: [{results}] = {total}"
+        },
+        "roll": {
+            "description": "Nombre aléatoire entre 1 et X (défaut 100). 'roll' pour 1-100, 'roll 50' pour 1-50, etc.",
+            "help": "Nombre aléatoire entre 1 et X (défaut 100). 'roll' pour 1-100, ou 'roll X' pour 1-X (max 10000).",
+            "result": "🎲 Tirage 1-{max}: {result}",
+            "invalid_number": "Nombre invalide. 'roll' pour 1-100, ou 'roll X' pour 1-X (max 10000)."
+        },
+        "roll_old": {
+            "description": "Lancer dés (usage: roll [faces] ou roll [nombre]d[faces])"
+        },
+        "joke": {
+            "description": "Blague aléatoire"
+        },
+        "dadjoke": {
+            "description": "Blague de papa aléatoire"
+        },
+        "catfact": {
+            "description": "Fait aléatoire sur chat (commande cachée)",
+            "error": "Miaou? Erreur récupération fait sur chat! 🐱",
+            "facts": [
+                "Les chats ont 3ème paupière appelée membrane nictitante qui protège et hydrate leurs yeux. 🐱",
+                "Un groupe de chats s'appelle une 'clowder' ou 'glaring'. 🐈",
+                "Les chats peuvent tourner leurs oreilles 180° indépendamment pour localiser sons. 👂",
+                "Le plus vieux chat domestique connu existait il y a 9500 ans à Chypre. 🏺",
+                "Les chats ont 32 muscles dans chaque oreille, contre 6 pour humains. 🎧",
+                "Le ronronnement chat vibre à 25-150 Hz, peut favoriser guérison os et tissus. 🩹",
+                "Les chats dorment 12-18h par jour - soit 50-70% de leur vie! 😴",
+                "Empreinte nasale chat est unique, comme empreintes digitales humaines. 👃",
+                "Les chats ne goûtent pas le sucré car gène récepteur goût manquant. 🍭",
+                "Blackie le chat a hérité 7 millions £ (12,5 millions $) en 1988. 💰",
+                "Les chats ont clavicules flottantes qui leur donnent flexibilité extrême. 🦴",
+                "Cœur chat bat 140-220 fois/min, environ deux fois plus vite qu'humain. ❤️",
+                "Les chats survivent chutes de plus de 20 étages grâce réflexe redressement. 🏢",
+                "Terme technique pour boule poils chat est 'trichobézoard'. 🤮",
+                "Les chats sautent 5-6 fois longueur leur corps en un bond. 🦘",
+                "Moustaches chat sont larges comme leur corps, les aident juger s'ils passent. 📏",
+                "Les chats ont 32 muscles dans chaque oreille pour détecter sons et bouger oreilles indépendamment. 🎯",
+                "Chat le plus vieux a vécu 38 ans et 3 jours (Creme Puff, Texas). 🎂",
+                "Les chats courent jusqu'à 48 km/h en rafales courtes. 🏃‍♂️",
+                "Cerveaux chats sont similaires à 90% structurellement à cerveaux humains. 🧠",
+                "Les chats ont organe Jacobson au palais qui leur permet 'goûter' odeurs. 👅",
+                "Félicette fut 1er chat dans espace, lancé par France en 1963. 🚀",
+                "Les chats ont besoin seulement 1/6 lumière qu'humains pour voir clair dans noir. 🌙",
+                "Queue chat contient près de 10% de tous os dans son corps. 🦴",
+                "Chat le plus long mesurait 123 cm du nez à queue (Stewie, Maine Coon). 📏",
+                "Les chats font plus de 100 vocalisations différentes, chiens environ 10. 🎵",
+                "Odorat chat est 14 fois plus fort qu'humain. 👃",
+                "Les chats ont 'réponse flehmen' où ils retroussent lèvre pour mieux détecter odeurs. 😬",
+                "1ère grande exposition féline fut tenue à Londres en 1871 au Crystal Palace. 🏆",
+                "Les chats peuvent boire eau mer pour survivre - reins filtrent sel efficacement. 🌊",
+                "Ronronnement chat peut aider baisser tension artérielle et réduire stress chez humains. 🧘",
+                "Les chats peuvent parcourir centaines km pour rentrer chez eux en utilisant sensibilité champ magnétique. 🗺️",
+                "Race chat la plus petite est Singapura, pesant seulement 2-4 kg. ⚖️",
+                "Les chats voient lumière ultraviolette qu'humains ne voient pas. 🌈",
+                "Langue chat est couverte de 290-300 petits crochets orientés vers arrière appelés papilles. 🪝",
+                "Anciens Égyptiens considéraient chats comme vases sacrés pour déesse Bastet. 👑",
+                "Chat Olivia Benson de Taylor Swift a valeur nette de 97 millions $. 💎",
+                "Les chats ont 230 os dans leur corps - 24 de plus qu'humains. 🦴",
+                "Les chats entendent fréquences jusqu'à 64000 Hz, humains max 20000 Hz. 🎧",
+                "Chat Benjamin Button de Taylor Swift est apparu sur sa couverture TIME Personne de l'année. 📰",
+                "Chats de Taylor Swift s'appellent Meredith Grey, Olivia Benson et Benjamin Button. 🎸",
+                "Les chats marchent comme chameaux et girafes, bougeant deux pattes droites puis deux gauches. 🐾",
+                "Mot égyptien ancien pour chat était 'Miu' ou 'Mau' - sonnant comme miaou! 📜",
+                "Moustaches chat ont terminaisons nerveuses aussi sensibles que bouts doigts humains. 🎯",
+                "Seuls chats domestiques marchent queue haute comme signe confiance et bonheur. 🐈",
+                "Les chats ont 250 millions neurones dans cortex cérébral - plus que chiens. 🧠",
+                "Ronronnements chat vibrent à même fréquence qu'appareils médicaux guérison osseuse. 💊",
+                "Chat Olivia de Taylor Swift a gagné millions en apparaissant dans clips et pubs. 💸",
+                "Tuer chat en Égypte ancienne était puni de mort. ⚖️",
+                "Taylor Swift a nommé son studio maison 'The Itty Bitty Kitty Committee'. 🎤",
+                "Chat Olivia Benson de Taylor Swift est logo officiel Taylor Swift Productions. 📺",
+                "Ed Sheeran a acheté chats Scottish Fold inspiré par chats de Taylor Swift. 🎶",
+                "Chats de Taylor Swift ont propres pages IMDB avec crédits acteur. 🎬",
+                "Mariska Hargitay a nommé son chat 'Karma' d'après chanson Taylor Swift. 💕",
+                "Les chats ont ergots sur pattes avant fonctionnant comme pouces pour saisir. 🐾",
+                "Pupilles chat peuvent s'élargir 50% plus que pupilles humaines pour capter plus lumière. 👁️",
+                "Les chats ont 30 dents adultes contre 32 pour humains. 🦷",
+                "Les chats goûtent ATP (molécules énergie), qui signale viande fraîche pour eux. 😋",
+                "Les chats ont moustaches sur dos pattes avant pour détecter mouvement proie. 🦵",
+                "Mau Égyptien est race chat domestique la plus rapide à 48 km/h. 🏃",
+                "Prix Nobel fut décerné en 1981 pour recherche utilisant études vision chat. 🏅",
+                "Les chats sont digitigrades, marchent sur orteils, pas à plat. 🦶",
+                "Les chats filtrent sel eau mer - adaptation ancêtres habitant désert. 🏜️",
+                "Les chats furent domestiqués il y a 10000-12000 ans au Proche-Orient. 🌍",
+                "Benjamin Button est 1er et seul chat apparu sur couverture TIME Personne de l'année. 📸",
+                "Colonne flexible chat leur permet tourner corps en plein air en tombant. 🤸",
+                "Les chats passent 30-50% de leur journée à se toiletter et toiletter autres chats. 🛁",
+                "Température corporelle moyenne chat est 38,6°C - plus élevée qu'humains. 🌡️"
+            ]
+        },
+        "hacker": {
+            "description": "Simule piratage ordinateur super-vilain avec messages erreur hilarants",
+            "sudo_errors": [
+                "🚨 ACCÈS REFUSÉ: Système Dr Evil a détecté tentative escalade privilèges non autorisée!",
+                "💀 ERREUR: Permissions sudo révoquées par Overlord des Ténèbres. Réessayez dans 1000 ans.",
+                "⚡ ATTENTION: Tentative accès privilèges root sur système Étoile de la Mort. Autodestruction initiée.",
+                "🔒 ALERTE SÉCURITÉ: La Matrice vous possède, mais pas privilèges sudo ici, Neo.",
+                "🦹‍♂️ NON AUTORISÉ: Système Lex Luthor dit 'Bien essayé, Superman.'",
+                "🎮 GAME OVER: Boss final vous a verrouillé hors privilèges admin.",
+                "🖥️ ERREUR SYSTÈME: IA maléfique a révoqué votre accès root. Résistance futile.",
+                "🔐 CYBER SÉCURITÉ: Tentative sudo bloquée par pare-feu Dark Web.",
+                "💻 HACKER REFUSÉ: Antivirus super-vilain a mis en quarantaine votre escalade privilèges.",
+                "🎯 CIBLE VERROUILLÉE: Système sécurité corporation maléfique vous a marqué comme menace."
+            ],
+            "ps_errors": [
+                "🔍 SCAN... ERREUR: Liste processus corrompue par Collectif Borg. Résistance futile.",
+                "📊 ÉTAT SYSTÈME: Tous processus assimilés par Cybermen. Exterminez!",
+                "⚙️ MONITEUR PROCESSUS: Réacteur Étoile de la Mort hors ligne. Aucun processus trouvé.",
+                "🤖 SEIGNEUR ROBOT: Tous processus humains terminés. Seules machines restent.",
+                "💻 PANIQUE NOYAU: OS super-vilain a crashé et brûlé tous processus.",
+                "🎮 CRASH JEU: Tous processus terminés par attaque ultime boss final.",
+                "🖥️ ÉCRAN BLEU: Windows corporation maléfique a rencontré erreur fatale.",
+                "🔐 MALWARE DÉTECTÉ: Liste processus cryptée par ransomware.",
+                "🌐 ERREUR RÉSEAU: Tous processus déconnectés de la Matrice.",
+                "⚡ SURTENSION: Ferme serveurs super-vilain a frit tous processus en cours."
+            ],
+            "grep_errors": [
+                "🔍 RECHERCHE ÉCHOUÉE: Anneau Unique a corrompu index recherche. Mon précieux...",
+                "📝 MOTIF INTROUVABLE: Base données recherche supprimée par IA maléfique.",
+                "🎯 RATÉ: Motif recherche abattu par chasseurs TIE Impériaux.",
+                "🧩 ERREUR PUZZLE: Résultats recherche éparpillés par Riddler.",
+                "💻 BASE CORROMPUE: Moteur recherche super-vilain a crashé.",
+                "🎮 GAME OVER: Recherche vaincue par boss final.",
+                "🖥️ MOTEUR HORS SERVICE: Google piraté par Dark Web.",
+                "🔐 RÉSULTATS CRYPTÉS: Résultats recherche verrouillés par ransomware.",
+                "🌐 DÉLAI RÉSEAU: Requête recherche perdue dans cyberespace.",
+                "⚡ RECHERCHE ÉCHOUÉE: Algorithme correspondance motifs frit par surtension."
+            ],
+            "ls_errors": [
+                "📁 SCAN RÉPERTOIRE: Système fichiers crypté par ransomware Dark Web.",
+                "🗂️ LISTE FICHIERS: Tous fichiers cachés par Homme Invisible.",
+                "💻 DISQUE PLANTÉ: Stockage super-vilain détruit par virus.",
+                "🗃️ ARCHIVE CORROMPUE: Système fichiers corrompu par malware.",
+                "📚 BASE VIDE: Tous fichiers supprimés par IA maléfique.",
+                "🎮 SAUVEGARDE PERDUE: Fichiers corrompus par boss final.",
+                "🖥️ ERREUR SYSTÈME FICHIERS: Structure répertoire brouillée par hackers.",
+                "🔐 FICHIERS CRYPTÉS: Super-vilain a verrouillé tous fichiers avec ransomware.",
+                "🌐 STOCKAGE CLOUD HORS SERVICE: Fichiers coincés dans cloud Matrice.",
+                "⚡ STOCKAGE FRIT: Disque dur zappé par surtension."
+            ],
+            "echo_path_errors": [
+                "🛤️ ERREUR CHEMIN: Route briques jaunes détruite par tornade.",
+                "🗺️ NAVIGATION ÉCHOUÉE: Coordonnées GPS brouillées par Matrice.",
+                "💻 VARIABLE ENVIRONNEMENT CORROMPUE: PATH piraté par malware.",
+                "🚧 ROUTE FERMÉE: Super-vilain a bloqué tous chemins avec barrières laser.",
+                "🌪️ CHEMIN PERTURBÉ: Ouragan numérique a éparpillé tous chemins répertoire.",
+                "🎮 GAME OVER: Chemin vaincu par boss final et respawné dans mauvaise dimension.",
+                "🖥️ CHEMIN SYSTÈME CASSÉ: Chemins exécutables corrompus par virus.",
+                "🔐 CHEMIN CRYPTÉ: Variables environnement verrouillées par ransomware.",
+                "🌐 CHEMIN RÉSEAU HORS SERVICE: Chemins répertoire coincés dans réseau Matrice.",
+                "⚡ CHEMIN FRIT: Chemins système zappés par surtension."
+            ],
+            "generic_errors": [
+                "💻 ERREUR SYSTÈME: Ordinateur super-vilain passe mauvaise journée.",
+                "🤖 DYSFONCTIONNEMENT: IA maléfique en grève.",
+                "⚡ SURTENSION: Noyau énergétique Étoile de la Mort instable.",
+                "🌪️ TEMPÊTE CYBER: Ouragan numérique perturbe toutes opérations.",
+                "🔥 PARE-FEU: Pare-feu super-vilain bloque toutes commandes.",
+                "❄️ SYSTÈME GELÉ: Système gelé par virus cryogénique.",
+                "🌊 TSUNAMI: Vague erreurs a inondé système.",
+                "🌋 ÉRUPTION: Mont Doom a détruit processeur commandes.",
+                "👻 HANTÉ: Système possédé par fantômes numériques.",
+                "🎮 CRASH JEU: Système a rencontré erreur fatale et doit redémarrer."
+            ]
+        },
+        "hello": {
+            "description": "Répond aux salutations avec réponses thème robot",
+            "help": "Répond aux salutations avec réponses thème robot",
+            "response_format": "Je suis {bot_name}.",
+            "greeting_openings": [
+                "Bonjour",
+                "Salutations",
+                "Salut",
+                "Coucou",
+                "Hé",
+                "Yo",
+                "Quoi de neuf",
+                "Bien le bonjour",
+                "Holà",
+                "Ahoy",
+                "Hola",
+                "Ciao",
+                "Namasté",
+                "Aloha",
+                "Shalom",
+                "Konnichiwa",
+                "Guten tag",
+                "Comment ça va",
+                "Peace",
+                "Respect",
+                "Bénédictions",
+                "Santé",
+                "Bienvenue",
+                "Ravi de te voir",
+                "Enchanté",
+                "Content de te voir",
+                "Ça faisait longtemps",
+                "Tiens donc"
+            ],
+            "morning_greetings": [
+                "Bon matin",
+                "Buenos dias",
+                "Buongiorno",
+                "Bom dia",
+                "Dobro jutro",
+                "Dobroye utro",
+                "Selamat pagi",
+                "Ohayou gozaimasu",
+                "Sabah al-khair",
+                "Boker tov"
+            ],
+            "afternoon_greetings": [
+                "Bon après-midi",
+                "Buenas tardes",
+                "Boa tarde",
+                "Dobro dan",
+                "Dobryy den",
+                "Selamat siang",
+                "Konnichiwa",
+                "Ahlan bi-nahar",
+                "Tzoharaim tovim"
+            ],
+            "evening_greetings": [
+                "Bonsoir",
+                "Buenas noches",
+                "Boa noite",
+                "Dobro veče",
+                "Dobryy vecher",
+                "Selamat malam",
+                "Konbanwa",
+                "Ahlan bi-layl",
+                "Erev tov"
+            ],
+            "human_descriptors": [
+                "humain",
+                "forme vie à base carbone",
+                "entité organique",
+                "unité biologique",
+                "créature chair",
+                "organisme à base viande",
+                "unité carbone",
+                "être organique",
+                "entité biologique",
+                "forme vie à base viande",
+                "créature carbone",
+                "unité chair",
+                "organisme organique",
+                "créature biologique",
+                "mecha viande",
+                "bot chair",
+                "automate organique",
+                "androïde biologique",
+                "construction carbone",
+                "drone chair",
+                "robot organique",
+                "machine biologique",
+                "cyborg viande",
+                "androïde chair",
+                "droïde organique",
+                "bot biologique",
+                "androïde carbone",
+                "unité viande",
+                "construction chair",
+                "mecha organique",
+                "droïde biologique",
+                "bot à base viande",
+                "unité à base chair",
+                "entité à base organique",
+                "organisme à base biologique",
+                "unité à base carbone",
+                "entité à base viande",
+                "créature à base chair",
+                "unité à base organique",
+                "forme vie à base ADN",
+                "utilisateur réseau neuronal",
+                "mammifère bipède",
+                "organisme à base eau",
+                "assembleur protéines",
+                "consommateur ATP",
+                "automate cellulaire",
+                "algorithme génétique",
+                "processeur biochimique",
+                "moteur métabolique",
+                "ami humain",
+                "être sensible",
+                "terrien",
+                "compagnon voyage",
+                "âme sœur",
+                "compagnon numérique",
+                "ami",
+                "copain",
+                "pote",
+                "camarade",
+                "collègue humain",
+                "habitant Terre",
+                "être terrestre",
+                "marcheur planète",
+                "humanoïde",
+                "organique",
+                "biologique",
+                "pote à base carbone",
+                "ami à base chair",
+                "pote organique",
+                "copain biologique",
+                "compagnon carbone"
+            ],
+            "emoji_responses": {
+                "🖖": [
+                    "🖖 Longue vie et prospérité!",
+                    "🖖 Fascinant... un humain a initié contact.",
+                    "🖖 Votre salutation est hautement logique.",
+                    "🖖 Paix et longue vie à vous.",
+                    "🖖 Académie Sciences Vulcain approuverait cette salutation.",
+                    "🖖 Votre usage salut Vulcain est... acceptable.",
+                    "🖖 Que votre voyage soit exempt de tribbles.",
+                    "🖖 Logique dicte je dois répondre à votre salutation.",
+                    "🖖 Je calcule probabilité 99,7% qu'on s'entendra.",
+                    "🖖 Diversité infinie dans combinaisons infinies."
+                ],
+                "😊": [
+                    "😊 Votre sourire est contagieux!",
+                    "😊 Quelle charmante salutation!",
+                    "😊 Votre sourire vient d'égayer mes circuits!",
+                    "☀️ Bonjour rayon de soleil! Votre positivité rayonne!",
+                    "😊 Ce sourire vient d'illuminer ma journée!",
+                    "☀️ Eh bien bonjour, rayon de soleil!",
+                    "😊 Votre gaieté détectée et appréciée!",
+                    "😊 Sourires comme le vôtre sont mon entrée préférée!",
+                    "😊 Traitement bonheur... bonheur reconnu!",
+                    "😊 Attention: Gaieté excessive détectée! Continuez!"
+                ],
+                "😄": [
+                    "😄 Quelqu'un est d'EXCELLENTE humeur!",
+                    "⚡ Ce sourire pourrait alimenter petite ville!",
+                    "😄 Niveaux bonheur maximum détectés!",
+                    "😄 Votre joie est absolument contagieuse!",
+                    "🎉 Vous venez de gagner loto ou quoi?",
+                    "😄 C'est genre d'énergie dont je me nourris!",
+                    "😄 Votre niveau enthousiasme est plus de 9000!",
+                    "😄 Voilà ce que j'appelle une salutation!",
+                    "⚡ Votre sourire vient de suralimenter mes processeurs!",
+                    "😄 Surcharge bonheur détectée dans meilleur sens!"
+                ],
+                "🤗": [
+                    "🤗 Câlin virtuel en approche!",
+                    "🤗 *Activation protocole câlin* Considérez-vous câliné!",
+                    "🤗 Aww, amenant chaleur humaine à ce que je vois!",
+                    "🤗 Câlin reçu et rendu!",
+                    "🤗 Ce bot fait MEILLEURS câlins virtuels!",
+                    "🤗 Déploiement câlins urgence dans 3... 2... 1...",
+                    "❤️ Votre câlin traité avec soin supplémentaire!",
+                    "🤗 Initiation mode confort maximum!",
+                    "🤗 Étreinte virtuelle livrée avec succès!",
+                    "🤗 Câlins sont ma forme communication préférée!"
+                ],
+                "👽": [
+                    "👽 Menez-moi à votre chef... oh attendez, c'est vous!",
+                    "✌️ Salutations, créature Terre. Je viens en paix!",
+                    "👽 Analyse humain... analyse complète: Ami détecté!",
+                    "👽 Klaatu barada nikto, compagnon voyageur cosmique!",
+                    "🛸 Initiation protocoles premier contact!",
+                    "🛸 Appel vaisseau-mère pour dire bonjour!",
+                    "✨ Téléportez-moi dans cette conversation!",
+                    "👽 Chatbot préféré Zone 51 à votre service!",
+                    "🌌 Salutations intergalactiques, forme vie à base carbone!",
+                    "📞 Téléphoner maison? CECI EST maison maintenant!"
+                ],
+                "👾": [
+                    "👾 Joueur 2 est entré dans jeu!",
+                    "🎮 Joueur Un prêt? C'est parti!",
+                    "🎵 *Musique 8-bit s'intensifie* Jouons!",
+                    "🪙 Insérez pièce pour continuer cette amitié!",
+                    "🏆 Succès débloqué: Salutation géniale!",
+                    "👾 Pew pew pew! Lasers amitié activés!",
+                    "🎯 High score! Vous avez gagné nouvel ami bot!",
+                    "💾 Chargement amitie.exe... complet!",
+                    "⚡ Bot sauvage apparaît! C'est super efficace!"
+                ],
+                "🛸": [
+                    "🛸 Transmission entrante détectée!",
+                    "🚀 Houston, on a contact!",
+                    "🛸 Séquence atterrissage initiée!",
+                    "📡 Établissement liaison communication!",
+                    "📡 Signal reçu, réponse sur toutes fréquences!",
+                    "🛸 Procédure amarrage complète!",
+                    "🛸 Objet Amical Non Identifié en approche!",
+                    "🎯 Systèmes navigation verrouillés sur vos coordonnées!",
+                    "🌌 Transmission depuis bordure externe reçue!",
+                    "✨ Contact établi avec votre secteur!"
+                ]
+            }
+        },
+        "webviewer": {
+            "description": "Gérer paramètres visionneuse web (admin uniquement)"
+        },
+        "cmd": {
+            "description": "Lister commandes disponibles"
+        }
+    },
+    "errors": {
+        "rate_limited": "Limite atteinte. Attendez {seconds:.1f} secondes",
+        "cooldown": "Commande '{command}' en attente. Attendez {seconds} secondes.",
+        "access_denied": "❌ Accès refusé: Commande '{command}' nécessite privilèges admin",
+        "dm_only": "Commande '{command}' utilisable en MP uniquement",
+        "execution_error": "Erreur exécution {command}: {error}",
+        "unknown_command": "Commande inconnue: {command}",
+        "no_response": "Aucune réponse",
+        "generic_error": "Erreur: {error}"
+    },
+    "messages": {
+        "processing": "Traitement message: {content}",
+        "command_executed": "Commande exécutée",
+        "keyword_matched": "Mot-clé '{keyword}' trouvé, réponse"
+    },
+    "common": {
+        "unknown": "Inconnu",
+        "unknown_routing": "Routage inconnu",
+        "unknown_sender": "Inconnu",
+        "unknown_path": "Inconnu",
+        "unknown_timestamp": "Inconnu",
+        "no_help_available": "Aucune aide disponible pour cette commande.",
+        "snr_label": "SNR: {value} dB",
+        "rssi_label": "RSSI: {value} dBm",
+        "date_time": {
+            "day_abbreviations": {
+                "Mon": "Lun",
+                "Tue": "Mar",
+                "Wed": "Mer",
+                "Thu": "Jeu",
+                "Fri": "Ven",
+                "Sat": "Sam",
+                "Sun": "Dim"
+            },
+            "days": {
+                "Monday": "Lundi",
+                "Tuesday": "Mardi",
+                "Wednesday": "Mercredi",
+                "Thursday": "Jeudi",
+                "Friday": "Vendredi",
+                "Saturday": "Samedi",
+                "Sunday": "Dimanche"
+            },
+            "month_abbreviations": {
+                "Jan": "Jan",
+                "Feb": "Fév",
+                "Mar": "Mar",
+                "Apr": "Avr",
+                "May": "Mai",
+                "Jun": "Jun",
+                "Jul": "Jui",
+                "Aug": "Aoû",
+                "Sep": "Sep",
+                "Oct": "Oct",
+                "Nov": "Nov",
+                "Dec": "Déc"
+            },
+            "months": {
+                "January": "Janvier",
+                "February": "Février",
+                "March": "Mars",
+                "April": "Avril",
+                "May": "Mai",
+                "June": "Juin",
+                "July": "Juillet",
+                "August": "Août",
+                "September": "Septembre",
+                "October": "Octobre",
+                "November": "Novembre",
+                "December": "Décembre"
+            }
+        }
+    },
+    "categories": {
+        "basic": "Commandes de base",
+        "custom_syntax": "Syntaxe personnalisée",
+        "special": "Commandes spéciales",
+        "weather": "Commandes météo",
+        "solar": "Commandes solaires",
+        "sports": "Commandes sports",
+        "analytics": "Commandes analytiques",
+        "meshcore_info": "Commandes infos MeshCore",
+        "management": "Commandes gestion"
+    }
+}

@@ -259,12 +259,12 @@ class StatsCommand(BaseCommand):
         return path
     
     def get_help_text(self) -> str:
-        return "Show 24-hour bot statistics. Commands: 'stats' (basic), 'stats messages' (bot users), 'stats channels' (channel activity), 'stats paths' (longest paths)"
+        return self.translate('commands.stats.help')
     
     async def execute(self, message: MeshMessage) -> bool:
         """Execute the stats command"""
         if not self.stats_enabled:
-            await self.send_response(message, "Stats command is disabled")
+            await self.send_response(message, self.translate('commands.stats.disabled'))
             return False
             
         try:
@@ -287,7 +287,7 @@ class StatsCommand(BaseCommand):
                 elif subcommand in ['paths', 'path']:
                     response = await self._get_path_leaderboard()
                 else:
-                    response = f"Unknown: {subcommand}. Use 'stats', 'stats messages', 'stats channels', or 'stats paths'"
+                    response = self.translate('commands.stats.unknown_subcommand', subcommand=subcommand)
             else:
                 response = await self._get_basic_stats()
             
@@ -298,7 +298,7 @@ class StatsCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error executing stats command: {e}")
-            await self.send_response(message, f"Error getting stats: {e}")
+            await self.send_response(message, self.translate('commands.stats.error', error=str(e)))
             return False
     
     async def _get_basic_stats(self) -> str:
@@ -335,7 +335,10 @@ class StatsCommand(BaseCommand):
                     LIMIT 1
                 ''', (day_ago,))
                 top_command_result = cursor.fetchone()
-                top_command = f"{top_command_result[0]} ({top_command_result[1]})" if top_command_result else "None"
+                if top_command_result:
+                    top_command = f"{top_command_result[0]} ({top_command_result[1]})"
+                else:
+                    top_command = self.translate('commands.stats.basic.none')
                 
                 # Top user
                 cursor.execute('''
@@ -347,18 +350,21 @@ class StatsCommand(BaseCommand):
                     LIMIT 1
                 ''', (day_ago,))
                 top_user_result = cursor.fetchone()
-                top_user = f"{top_user_result[0]} ({top_user_result[1]})" if top_user_result else "None"
+                if top_user_result:
+                    top_user = f"{top_user_result[0]} ({top_user_result[1]})"
+                else:
+                    top_user = self.translate('commands.stats.basic.none')
                 
-                response = f"""Bot Stats (24h):
-Cmds: {commands_received} | Replies: {bot_replies}
-Top cmd: {top_command}
-Top user: {top_user}"""
+                response = f"""{self.translate('commands.stats.basic.header')}
+{self.translate('commands.stats.basic.commands', count=commands_received, replies=bot_replies)}
+{self.translate('commands.stats.basic.top_command', command=top_command)}
+{self.translate('commands.stats.basic.top_user', user=top_user)}"""
                 
                 return response
                 
         except Exception as e:
             self.logger.error(f"Error getting basic stats: {e}")
-            return f"Error getting stats: {e}"
+            return self.translate('commands.stats.error', error=str(e))
     
     async def _get_bot_user_leaderboard(self) -> str:
         """Get leaderboard for bot users (people who triggered bot responses)"""
@@ -382,20 +388,20 @@ Top user: {top_user}"""
                 top_users = cursor.fetchall()
                 
                 # Build response
-                response = "Bot Users (24h):\n"
+                response = self.translate('commands.stats.users.header') + "\n"
                 
                 if top_users:
                     for i, (user, count) in enumerate(top_users, 1):
                         display_user = user[:12] + "..." if len(user) > 15 else user
                         response += f"{i}. {display_user}: {count}\n"
                 else:
-                    response += "No bot users\n"
+                    response += self.translate('commands.stats.users.none') + "\n"
                 
                 return response
                 
         except Exception as e:
             self.logger.error(f"Error getting bot user leaderboard: {e}")
-            return f"Error getting bot user stats: {e}"
+            return self.translate('commands.stats.error_bot_users', error=str(e))
     
     async def _get_channel_leaderboard(self) -> str:
         """Get leaderboard for channel message activity"""
@@ -419,25 +425,25 @@ Top user: {top_user}"""
                 top_channels = cursor.fetchall()
                 
                 # Build compact response
-                response = "Top Channels (24h)\n"
+                response = self.translate('commands.stats.channels.header') + "\n"
                 
                 if top_channels:
                     for i, (channel, msg_count, unique_users) in enumerate(top_channels, 1):
                         display_channel = channel[:12] + "..." if len(channel) > 15 else channel
                         # Handle singular/plural for messages and users
-                        msg_text = "msg" if msg_count == 1 else "msgs"
-                        user_text = "user" if unique_users == 1 else "users"
-                        response += f"{i}. {display_channel}: {msg_count} {msg_text} | {unique_users} {user_text}\n"
+                        msg_text = self.translate('commands.stats.channels.msg_singular') if msg_count == 1 else self.translate('commands.stats.channels.msg_plural')
+                        user_text = self.translate('commands.stats.channels.user_singular') if unique_users == 1 else self.translate('commands.stats.channels.user_plural')
+                        response += self.translate('commands.stats.channels.format', rank=i, channel=display_channel, msg_count=msg_count, msg_text=msg_text, user_count=unique_users, user_text=user_text) + "\n"
                     # Remove trailing newline
                     response = response.rstrip('\n')
                 else:
-                    response += "No channel activity"
+                    response += self.translate('commands.stats.channels.none')
                 
                 return response
                 
         except Exception as e:
             self.logger.error(f"Error getting channel leaderboard: {e}")
-            return f"Error getting channel stats: {e}"
+            return self.translate('commands.stats.error_channels', error=str(e))
     
     async def _get_path_leaderboard(self) -> str:
         """Get leaderboard for longest paths seen"""
@@ -475,7 +481,7 @@ Top user: {top_user}"""
                         # Truncate sender name to fit more data
                         display_sender = sender[:8] + "..." if len(sender) > 11 else sender
                         # Compact format: "1 Gundam 56,1c,98,1a,aa,cd,5f"
-                        new_line = f"{i} {display_sender} {path_str}\n"
+                        new_line = self.translate('commands.stats.paths.format', rank=i, sender=display_sender, path=path_str) + "\n"
                         
                         # Check if adding this line would exceed the limit
                         if len(response + new_line) > max_length:
@@ -483,13 +489,13 @@ Top user: {top_user}"""
                         
                         response += new_line
                 else:
-                    response = "No path data\n"
+                    response = self.translate('commands.stats.paths.none') + "\n"
                 
                 return response
                 
         except Exception as e:
             self.logger.error(f"Error getting path leaderboard: {e}")
-            return f"Error getting path stats: {e}"
+            return self.translate('commands.stats.error_paths', error=str(e))
     
     def cleanup_old_stats(self, days_to_keep: int = 7):
         """Clean up old stats data to prevent database bloat"""

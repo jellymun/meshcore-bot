@@ -22,13 +22,13 @@ class SunCommand(BaseCommand):
             sun_info = get_sun()
             
             # Send response using unified method
-            response = f"☀️ Sun Info:\n{sun_info}"
+            response = self.translate('commands.sun.response', info=sun_info)
             return await self.send_response(message, response)
             
         except Exception as e:
-            error_msg = f"Error getting sun info: {e}"
+            error_msg = self.translate('commands.sun.error', error=str(e))
             return await self.send_response(message, error_msg)
     
     def get_help_text(self):
         """Get help text for this command"""
-        return "Get sunrise/sunset times and sun position"
+        return self.translate('commands.sun.help')

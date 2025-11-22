@@ -7,10 +7,10 @@ Decodes hex path data to show which repeaters were involved in message routing
 import re
 import time
 import asyncio
-import math
 from typing import List, Optional, Dict, Any, Tuple
 from .base_command import BaseCommand
 from ..models import MeshMessage
+from ..utils import calculate_distance
 
 
 class PathCommand(BaseCommand):
@@ -139,7 +139,7 @@ class PathCommand(BaseCommand):
             hex_matches = re.findall(hex_pattern, path_input)
             
             if not hex_matches:
-                return "❌ No valid hex values found in path data. Use format like: 11,98,a4,49,cd,5f,01"
+                return self.translate('commands.path.no_valid_hex')
             
             # Convert to uppercase for consistency
             # hex_matches preserves the order from the original path
@@ -155,7 +155,7 @@ class PathCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error decoding path: {e}")
-            return f"❌ Error decoding path: {e}"
+            return self.translate('commands.path.error_decoding', error=str(e))
     
     async def _lookup_repeater_names(self, node_ids: List[str]) -> Dict[str, Dict[str, Any]]:
         """Look up repeater names for given node IDs"""
@@ -347,7 +347,7 @@ class PathCommand(BaseCommand):
                             if public_key.startswith(node_id):
                                 # Check if this is a repeater
                                 if hasattr(self.bot, 'repeater_manager') and self.bot.repeater_manager._is_repeater_device(contact_data):
-                                    name = contact_data.get('adv_name', contact_data.get('name', 'Unknown'))
+                                    name = contact_data.get('adv_name', contact_data.get('name', self.translate('commands.path.unknown_name')))
                                     device_matches.append({
                                         'name': name,
                                         'public_key': public_key,
@@ -414,23 +414,6 @@ class PathCommand(BaseCommand):
             self.logger.warning(f"Could not get API cache data: {e}")
         return None
     
-    def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate haversine distance between two points in kilometers"""
-        # Convert latitude and longitude from degrees to radians
-        lat1_rad = math.radians(lat1)
-        lon1_rad = math.radians(lon1)
-        lat2_rad = math.radians(lat2)
-        lon2_rad = math.radians(lon2)
-        
-        # Haversine formula
-        dlat = lat2_rad - lat1_rad
-        dlon = lon2_rad - lon1_rad
-        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
-        c = 2 * math.asin(math.sqrt(a))
-        
-        # Earth's radius in kilometers
-        earth_radius = 6371.0
-        return earth_radius * c
     
     def _select_repeater_by_proximity(self, repeaters: List[Dict[str, Any]], node_id: str = None, path_context: List[str] = None) -> Tuple[Optional[Dict[str, Any]], float]:
         """
@@ -496,7 +479,7 @@ class PathCommand(BaseCommand):
         # If only one repeater, check if it's within range
         if len(scored_repeaters) == 1:
             repeater, recency_score = scored_repeaters[0]
-            distance = self._calculate_distance(
+            distance = calculate_distance(
                 self.bot_latitude, self.bot_longitude,
                 repeater['latitude'], repeater['longitude']
             )
@@ -511,7 +494,7 @@ class PathCommand(BaseCommand):
         # Calculate combined proximity + recency scores
         combined_scores = []
         for repeater, recency_score in scored_repeaters:
-            distance = self._calculate_distance(
+            distance = calculate_distance(
                 self.bot_latitude, self.bot_longitude,
                 repeater['latitude'], repeater['longitude']
             )
@@ -869,13 +852,13 @@ class PathCommand(BaseCommand):
         
         for repeater, recency_score in scored_repeaters:
             # Calculate distance to previous node
-            prev_distance = self._calculate_distance(
+            prev_distance = calculate_distance(
                 prev_location[0], prev_location[1],
                 repeater['latitude'], repeater['longitude']
             )
             
             # Calculate distance to next node
-            next_distance = self._calculate_distance(
+            next_distance = calculate_distance(
                 next_location[0], next_location[1],
                 repeater['latitude'], repeater['longitude']
             )
@@ -896,11 +879,11 @@ class PathCommand(BaseCommand):
             # Apply maximum range threshold
             if self.max_proximity_range > 0:
                 # Check if any distance is beyond range
-                prev_dist = self._calculate_distance(
+                prev_dist = calculate_distance(
                     prev_location[0], prev_location[1],
                     best_repeater['latitude'], best_repeater['longitude']
                 )
-                next_dist = self._calculate_distance(
+                next_dist = calculate_distance(
                     next_location[0], next_location[1],
                     best_repeater['latitude'], best_repeater['longitude']
                 )
@@ -929,7 +912,7 @@ class PathCommand(BaseCommand):
         best_combined_score = 0.0
         
         for repeater, recency_score in scored_repeaters:
-            distance = self._calculate_distance(
+            distance = calculate_distance(
                 reference_location[0], reference_location[1],
                 repeater['latitude'], repeater['longitude']
             )
@@ -972,15 +955,16 @@ class PathCommand(BaseCommand):
                 if info.get('collision', False):
                     # Multiple repeaters with same prefix
                     matches = info.get('matches', 0)
-                    line = f"{node_id}: {matches} repeaters"
+                    line = self.translate('commands.path.node_collision', node_id=node_id, matches=matches)
                 elif info.get('geographic_guess', False):
                     # Geographic proximity selection
                     name = info['name']
                     confidence = info.get('confidence', 0.0)
                     
                     # Truncate name if too long
+                    truncation = self.translate('commands.path.truncation')
                     if len(name) > 20:
-                        name = name[:17] + "..."
+                        name = name[:17] + truncation
                     
                     # Add confidence indicator
                     if confidence >= 0.9:
@@ -990,23 +974,25 @@ class PathCommand(BaseCommand):
                     else:
                         confidence_indicator = self.low_confidence_symbol
                     
-                    line = f"{node_id}: {name} {confidence_indicator}"
+                    line = self.translate('commands.path.node_geographic', node_id=node_id, name=name, confidence=confidence_indicator)
                 else:
                     # Single repeater found
                     name = info['name']
                     
                     # Truncate name if too long
+                    truncation = self.translate('commands.path.truncation')
                     if len(name) > 27:
-                        name = name[:24] + "..."
+                        name = name[:24] + truncation
                     
-                    line = f"{node_id}: {name}"
+                    line = self.translate('commands.path.node_format', node_id=node_id, name=name)
             else:
                 # Unknown repeater
-                line = f"{node_id}: Unknown"
+                line = self.translate('commands.path.node_unknown', node_id=node_id)
             
             # Ensure line fits within 130 character limit
             if len(line) > 130:
-                line = line[:127] + "..."
+                truncation = self.translate('commands.path.truncation')
+                line = line[:127] + truncation
             
             lines.append(line)
         
@@ -1037,14 +1023,14 @@ class PathCommand(BaseCommand):
                     if current_message:
                         # Add ellipsis on new line to end of continued message (if not the last message)
                         if i < len(lines):
-                            current_message += "\n..."
+                            current_message += self.translate('commands.path.continuation_end')
                         await self.send_response(message, current_message.rstrip())
                         await asyncio.sleep(3.0)  # Delay between messages (same as other commands)
                         message_count += 1
                     
                     # Start new message with ellipsis on new line at beginning (if not first message)
                     if message_count > 0:
-                        current_message = f"...\n{line}"
+                        current_message = self.translate('commands.path.continuation_start', line=line)
                     else:
                         current_message = line
                 else:
@@ -1068,7 +1054,7 @@ class PathCommand(BaseCommand):
                 
                 # Check if it's a direct connection
                 if "Direct" in path_string or "0 hops" in path_string:
-                    return "📡 Direct connection (0 hops)"
+                    return self.translate('commands.path.direct_connection')
                 
                 # Try to extract path nodes from the path string
                 # Path strings are typically in format: "node1,node2,node3 via ROUTE_TYPE_*"
@@ -1084,17 +1070,17 @@ class PathCommand(BaseCommand):
                     return await self._decode_path(path_input)
                 else:
                     # Single node or unknown format
-                    return f"📡 Path: {path_string}"
+                    return self.translate('commands.path.path_prefix', path_string=path_string)
             else:
-                return "❌ No path information available in current message"
+                return self.translate('commands.path.no_path')
                 
         except Exception as e:
             self.logger.error(f"Error extracting path from current message: {e}")
-            return f"❌ Error extracting path from current message: {e}"
+            return self.translate('commands.path.error_extracting', error=str(e))
     
     def get_help(self) -> str:
         """Get help text for the path command"""
-        return """Path: !path [hex] - Decode path to show repeaters. Use !path alone for recent message path, or !path [7e,01] for specific path."""
+        return self.translate('commands.path.help')
     
     def get_help_text(self) -> str:
         """Get help text for the path command (used by help system)"""

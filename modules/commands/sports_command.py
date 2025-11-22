@@ -528,7 +528,7 @@ class SportsCommand(BaseCommand):
         return True
     
     def get_help_text(self) -> str:
-        return "Get sports scores & schedules. Use 'sports' for default teams, 'sports [team]' for specific team, or 'sports [league]' for league games."
+        return self.translate('commands.sports.help')
     
     async def execute(self, message: MeshMessage) -> bool:
         """Execute the sports command"""
@@ -563,12 +563,12 @@ class SportsCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error in sports command: {e}")
-            return await self.send_response(message, "Error fetching sports data")
+            return await self.send_response(message, self.translate('commands.sports.error_fetching'))
     
     async def get_default_teams_scores(self) -> str:
         """Get scores for default teams, sorted by game time"""
         if not self.default_teams:
-            return "No default teams configured"
+            return self.translate('commands.sports.no_default_teams')
         
         game_data = []
         for team in self.default_teams:
@@ -582,7 +582,7 @@ class SportsCommand(BaseCommand):
                 self.logger.warning(f"Error fetching score for {team}: {e}")
         
         if not game_data:
-            return "No games found for default teams"
+            return self.translate('commands.sports.no_games_default')
         
         # Sort by game time (earliest first)
         game_data.sort(key=lambda x: x['timestamp'])
@@ -753,7 +753,7 @@ class SportsCommand(BaseCommand):
     async def get_city_scores(self, city_teams: List[Dict[str, str]], city_name: str) -> str:
         """Get scores for all teams in a city"""
         if not city_teams:
-            return f"No teams found for {city_name}"
+            return self.translate('commands.sports.no_teams_city', city=city_name)
         
         game_data = []
         for team_info in city_teams:
@@ -765,7 +765,7 @@ class SportsCommand(BaseCommand):
                 self.logger.warning(f"Error fetching score for {team_info}: {e}")
         
         if not game_data:
-            return f"No games found for {city_name} teams"
+            return self.translate('commands.sports.no_games_city', city=city_name)
         
         # Sort by game time (earliest first)
         game_data.sort(key=lambda x: x['timestamp'])
@@ -802,7 +802,7 @@ class SportsCommand(BaseCommand):
             events = data.get('events', [])
             
             if not events:
-                return f"No games found for {league_info['sport']}"
+                return self.translate('commands.sports.no_games_league', sport=league_info['sport'])
             
             # Parse all games and sort by time
             game_data = []
@@ -812,7 +812,7 @@ class SportsCommand(BaseCommand):
                     game_data.append(game_info)
             
             if not game_data:
-                return f"No games found for {league_info['sport']}"
+                return self.translate('commands.sports.no_games_league', sport=league_info['sport'])
             
             # Sort by game time (earliest first)
             game_data.sort(key=lambda x: x['timestamp'])
@@ -837,7 +837,7 @@ class SportsCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error fetching league scores: {e}")
-            return f"Error fetching {league_info['sport']} data"
+            return self.translate('commands.sports.error_fetching_league', sport=league_info['sport'])
     
     def parse_league_game_event(self, event: Dict, sport: str, league: str) -> Optional[Dict]:
         """Parse a league game event and return structured data with timestamp for sorting"""
@@ -1020,7 +1020,7 @@ class SportsCommand(BaseCommand):
         # Otherwise, treat as single team query
         team_info = self.TEAM_MAPPINGS.get(team_name)
         if not team_info:
-            return f"Team/League '{team_name}' not found. Try: seahawks, mariners, sounders, kraken, storm, chiefs, lfc, mlb, nfl, mls, wnba, epl, etc."
+            return self.translate('commands.sports.team_not_found', team=team_name)
         
         try:
             score_info = await self.fetch_team_score(team_info)
@@ -1029,10 +1029,10 @@ class SportsCommand(BaseCommand):
                 sport_emoji = self.SPORT_EMOJIS.get(team_info['sport'], '🏆')
                 return f"{sport_emoji} {score_info}"
             else:
-                return f"No games found for {team_name}"
+                return self.translate('commands.sports.no_games_team', team=team_name)
         except Exception as e:
             self.logger.error(f"Error fetching score for {team_name}: {e}")
-            return f"Error fetching data for {team_name}"
+            return self.translate('commands.sports.error_fetching_team', team=team_name)
     
     async def fetch_team_score(self, team_info: Dict[str, str]) -> Optional[str]:
         """Fetch score information for a team (legacy method for individual team queries)"""

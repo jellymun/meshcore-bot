@@ -27,9 +27,9 @@ class SolarforecastCommand(BaseCommand):
     category = "solar"
     cooldown_seconds = 10  # 10 second cooldown per user
     
-    # Error constants
-    ERROR_FETCHING_DATA = "Error fetching forecast"
-    NO_DATA_AVAILABLE = "No forecast data"
+    # Error constants - will use translations instead
+    ERROR_FETCHING_DATA = "Error fetching forecast"  # Deprecated - use translate
+    NO_DATA_AVAILABLE = "No forecast data"  # Deprecated - use translate
     
     # Forecast.Solar minimum panel size (10W)
     MIN_KWP = 0.01
@@ -57,7 +57,18 @@ class SolarforecastCommand(BaseCommand):
         self.db_manager = bot.db_manager
     
     def get_help_text(self) -> str:
-        return f"Usage: sf <location|repeater_name|coordinates|zipcode> [watts] [azimuth, 0=south] [angle] - Example: sf seattle 10 0 37"
+        return self.translate('commands.solarforecast.usage')
+    
+    def _translate_day_abbreviation(self, day_abbr: str) -> str:
+        """Translate English day abbreviation to localized version"""
+        # Map English abbreviations to translation keys in common.date_time
+        translation_key = f'common.date_time.day_abbreviations.{day_abbr}'
+        translated = self.translate(translation_key)
+        # If translation found (not just the key), return it
+        if translated != translation_key:
+            return translated
+        # Fallback: return original if no translation found
+        return day_abbr
     
     def can_execute(self, message: MeshMessage) -> bool:
         """Override cooldown check to be per-user"""
@@ -88,7 +99,7 @@ class SolarforecastCommand(BaseCommand):
         # Parse command: sf <location> [panel_size] [azimuth] [angle]
         parts = content.split()
         if len(parts) < 2:
-            await self.send_response(message, "Usage: sf <location|repeater_name|coordinates|zipcode> [W] [azimuth] [angle] - Example: sf seattle 10")
+            await self.send_response(message, self.translate('commands.solarforecast.usage_short'))
             return True
         
         try:
@@ -107,7 +118,7 @@ class SolarforecastCommand(BaseCommand):
                     num_value = float(parts[1])
                     if not (len(parts[1]) == 5 and parts[1].isdigit()):
                         # Single non-5-digit number - invalid, no location provided
-                        await self.send_response(message, "Usage: sf <location|repeater_name|coordinates|zipcode> [W] [azimuth] [angle] - Example: sf seattle 10")
+                        await self.send_response(message, self.translate('commands.solarforecast.usage_short'))
                         return True
                 except ValueError:
                     pass  # Not a number, continue with normal parsing
@@ -139,7 +150,7 @@ class SolarforecastCommand(BaseCommand):
             
             # Validate that we have a location
             if not location_str:
-                await self.send_response(message, "Usage: sf <location|repeater_name|coordinates|zipcode> [W] [azimuth] [angle] - Example: sf seattle 10")
+                await self.send_response(message, self.translate('commands.solarforecast.usage_short'))
                 return True
             
             # Parse optional parameters
@@ -154,7 +165,7 @@ class SolarforecastCommand(BaseCommand):
                     panel_str = parts[param_start_idx].strip().rstrip('wW')
                     panel_watts = float(panel_str)
                     if panel_watts <= 0 or panel_watts > 1000:
-                        await self.send_response(message, "Panel size must be 1-1000W")
+                        await self.send_response(message, self.translate('commands.solarforecast.panel_size_range'))
                         return True
                 except ValueError:
                     pass
@@ -164,7 +175,7 @@ class SolarforecastCommand(BaseCommand):
                 try:
                     azimuth = float(parts[param_start_idx + 1])
                     if not (-180 <= azimuth <= 180):
-                        await self.send_response(message, "Azimuth must be -180 to 180 (0=south)")
+                        await self.send_response(message, self.translate('commands.solarforecast.azimuth_range'))
                         return True
                 except ValueError:
                     pass
@@ -174,7 +185,7 @@ class SolarforecastCommand(BaseCommand):
                 try:
                     angle = float(parts[param_start_idx + 2])
                     if not (0 <= angle <= 90):
-                        await self.send_response(message, "Angle must be 0-90 degrees")
+                        await self.send_response(message, self.translate('commands.solarforecast.angle_range'))
                         return True
                 except ValueError:
                     pass
@@ -182,7 +193,7 @@ class SolarforecastCommand(BaseCommand):
             # Parse location (check for repeater name first, then coordinates, zip, or city)
             lat, lon, location_type = await self._parse_location(location_str)
             if lat is None or lon is None:
-                await self.send_response(message, f"Could not find location: {location_str}")
+                await self.send_response(message, self.translate('commands.solarforecast.no_location', location=location_str))
                 return True
             
             # Get location name for confirmation
@@ -198,7 +209,7 @@ class SolarforecastCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error in solar forecast command: {e}")
-            await self.send_response(message, f"Error: {e}")
+            await self.send_response(message, self.translate('commands.solarforecast.error', error=str(e)))
             return True
     
     def _clean_location_string(self, location: str) -> str:
@@ -527,18 +538,18 @@ class SolarforecastCommand(BaseCommand):
             result = await self._query_forecast_solar_scaled(lat, lon, angle, azimuth, kwp, api_key)
             
             if not result:
-                return self.ERROR_FETCHING_DATA
+                return self.translate('commands.solarforecast.error_fetching')
             
             # Check for rate limiting
             if result.get('rate_limited'):
-                return "Rate limit: Try again in 5 min"
+                return self.translate('commands.solarforecast.rate_limit')
             
             # Format output to fit 130 characters
             return self._format_forecast(result, panel_watts, location_name, lat, lon)
             
         except Exception as e:
             self.logger.error(f"Error getting forecast: {e}")
-            return f"Error: {e}"
+            return self.translate('commands.solarforecast.error', error=str(e))
     
     def _get_cache_key(self, lat: float, lon: float, declination: float,
                       azimuth: float, kwp: float, api_key: Optional[str]) -> str:
@@ -702,7 +713,7 @@ class SolarforecastCommand(BaseCommand):
         num_days = result.get('num_days', 0)
         
         if not watt_hours_day:
-            return self.NO_DATA_AVAILABLE
+            return self.translate('commands.solarforecast.no_data')
         
         # Get timezone from config or use system timezone
         timezone_str = self.bot.config.get('Bot', 'timezone', fallback='')
@@ -728,8 +739,11 @@ class SolarforecastCommand(BaseCommand):
         # Get day names for Day+2 and Day+3
         day_after_date = now + timedelta(days=2)
         day_after_2_date = now + timedelta(days=3)
-        day_after_name = day_after_date.strftime('%a')  # Mon, Tue, Wed, etc.
-        day_after_2_name = day_after_2_date.strftime('%a')
+        day_after_name_en = day_after_date.strftime('%a')  # Mon, Tue, Wed, etc.
+        day_after_2_name_en = day_after_2_date.strftime('%a')
+        # Translate day abbreviations
+        day_after_name = self._translate_day_abbreviation(day_after_name_en)
+        day_after_2_name = self._translate_day_abbreviation(day_after_2_name_en)
         
         # Build user-friendly forecast with peak grouped by day
         day_parts = []
@@ -929,11 +943,11 @@ class SolarforecastCommand(BaseCommand):
                             pass
                 today_prod_hours = len(unique_hours)
             
-            today_part = f"Today:{today_wh:.0f}Wh"
+            today_part = self.translate('commands.solarforecast.labels.today', wh=today_wh)
             if today_prod_hours > 0:
                 if first_day_utilization is not None and first_day_date == today:
                     # First day - show %util
-                    today_part += f" ({today_prod_hours}h,{first_day_utilization:.0f}%util)"
+                    today_part += self.translate('commands.solarforecast.labels.hours_util', hours=today_prod_hours, util=first_day_utilization)
                 else:
                     # Calculate utilization for this day
                     # Use 100% of panel capacity - API already accounts for real-world conditions
@@ -941,13 +955,13 @@ class SolarforecastCommand(BaseCommand):
                     typical_max_energy = typical_max_power * today_prod_hours
                     if typical_max_energy > 0:
                         utilization = (today_wh / typical_max_energy) * 100
-                        today_part += f" ({today_prod_hours}h,{utilization:.0f}%)"
+                        today_part += self.translate('commands.solarforecast.labels.hours_percent', hours=today_prod_hours, percent=utilization)
                     else:
-                        today_part += f" ({today_prod_hours}h)"
+                        today_part += self.translate('commands.solarforecast.labels.hours_only', hours=today_prod_hours)
             
             # Add peak if it's today
             if peak_date == today and peak_time_str:
-                today_part += f" Peak: {max_watts:.0f}W@{peak_time_str}"
+                today_part += " " + self.translate('commands.solarforecast.labels.peak', watts=max_watts, time=peak_time_str)
             
             # First line includes panel info and location
             first_line = f"{first_line_prefix}{today_part}"
@@ -984,11 +998,11 @@ class SolarforecastCommand(BaseCommand):
                             pass
                 tomorrow_prod_hours = len(unique_hours)
             
-            tomorrow_part = f"Tmrw:{tomorrow_wh:.0f}Wh"
+            tomorrow_part = self.translate('commands.solarforecast.labels.tomorrow', wh=tomorrow_wh)
             if tomorrow_prod_hours > 0:
                 if first_day_utilization is not None and first_day_date == tomorrow:
                     # First day - show %util
-                    tomorrow_part += f" ({tomorrow_prod_hours}h,{first_day_utilization:.0f}%util)"
+                    tomorrow_part += self.translate('commands.solarforecast.labels.hours_util', hours=tomorrow_prod_hours, util=first_day_utilization)
                 else:
                     # Calculate utilization for this day
                     # Use 100% of panel capacity - API already accounts for real-world conditions
@@ -996,13 +1010,13 @@ class SolarforecastCommand(BaseCommand):
                     typical_max_energy = typical_max_power * tomorrow_prod_hours
                     if typical_max_energy > 0:
                         utilization = (tomorrow_wh / typical_max_energy) * 100
-                        tomorrow_part += f" ({tomorrow_prod_hours}h,{utilization:.0f}%)"
+                        tomorrow_part += self.translate('commands.solarforecast.labels.hours_percent', hours=tomorrow_prod_hours, percent=utilization)
                     else:
-                        tomorrow_part += f" ({tomorrow_prod_hours}h)"
+                        tomorrow_part += self.translate('commands.solarforecast.labels.hours_only', hours=tomorrow_prod_hours)
             
             # Add peak if it's tomorrow
             if peak_date == tomorrow and peak_time_str:
-                tomorrow_part += f" Peak: {max_watts:.0f}W@{peak_time_str}"
+                tomorrow_part += " " + self.translate('commands.solarforecast.labels.peak', watts=max_watts, time=peak_time_str)
             
             lines.append(tomorrow_part)
         
@@ -1040,7 +1054,7 @@ class SolarforecastCommand(BaseCommand):
                             pass
                 day_after_prod_hours = len(unique_hours)
             
-            day_after_part = f"{day_after_name}:{day_after_wh:.0f}Wh"
+            day_after_part = self.translate('commands.solarforecast.labels.day_format', day=day_after_name, wh=day_after_wh)
             if day_after_prod_hours > 0:
                 # Calculate utilization for this day
                 # Use 100% of panel capacity - API already accounts for real-world conditions
@@ -1048,9 +1062,9 @@ class SolarforecastCommand(BaseCommand):
                 typical_max_energy = typical_max_power * day_after_prod_hours
                 if typical_max_energy > 0:
                     utilization = (day_after_wh / typical_max_energy) * 100
-                    day_after_part += f" ({day_after_prod_hours}h,{utilization:.0f}%)"
+                    day_after_part += self.translate('commands.solarforecast.labels.hours_percent', hours=day_after_prod_hours, percent=utilization)
                 else:
-                    day_after_part += f" ({day_after_prod_hours}h)"
+                    day_after_part += self.translate('commands.solarforecast.labels.hours_only', hours=day_after_prod_hours)
             
             # Peak is only shown for today or tomorrow, not for later days
             
@@ -1087,7 +1101,7 @@ class SolarforecastCommand(BaseCommand):
                             pass
                 day_after_2_prod_hours = len(unique_hours)
             
-            day_after_2_part = f"{day_after_2_name}:{day_after_2_wh:.0f}Wh"
+            day_after_2_part = self.translate('commands.solarforecast.labels.day_format', day=day_after_2_name, wh=day_after_2_wh)
             if day_after_2_prod_hours > 0:
                 # Calculate utilization for this day
                 # Use 100% of panel capacity - API already accounts for real-world conditions
@@ -1095,9 +1109,9 @@ class SolarforecastCommand(BaseCommand):
                 typical_max_energy = typical_max_power * day_after_2_prod_hours
                 if typical_max_energy > 0:
                     utilization = (day_after_2_wh / typical_max_energy) * 100
-                    day_after_2_part += f" ({day_after_2_prod_hours}h,{utilization:.0f}%)"
+                    day_after_2_part += self.translate('commands.solarforecast.labels.hours_percent', hours=day_after_2_prod_hours, percent=utilization)
                 else:
-                    day_after_2_part += f" ({day_after_2_prod_hours}h)"
+                    day_after_2_part += self.translate('commands.solarforecast.labels.hours_only', hours=day_after_2_prod_hours)
             
             # Peak is only shown for today or tomorrow, not for later days
             
@@ -1105,7 +1119,8 @@ class SolarforecastCommand(BaseCommand):
         
         # Add Day+2 and Day+3 on same line if both exist
         if day_plus_line_parts:
-            day_plus_line = " | ".join(day_plus_line_parts)
+            separator = self.translate('commands.solarforecast.labels.separator')
+            day_plus_line = separator.join(day_plus_line_parts)
             lines.append(day_plus_line)
         
         # If peak has passed, add it at the end
@@ -1118,7 +1133,7 @@ class SolarforecastCommand(BaseCommand):
                     today_watts.append(power)
             if today_watts:
                 past_max = max(today_watts)
-                lines.append(f"Peak: {past_max:.0f}W (past)")
+                lines.append(self.translate('commands.solarforecast.labels.peak_past', watts=past_max))
         
         # Join lines with newlines
         full_message = "\n".join(lines)

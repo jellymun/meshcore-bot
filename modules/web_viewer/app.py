@@ -138,6 +138,9 @@ class BotDataViewer:
             # Initialize repeater manager for geocoding functionality
             self.repeater_manager = RepeaterManager(minimal_bot)
             
+            # Initialize packet_stream table for real-time monitoring
+            self._init_packet_stream_table()
+            
             # Store database paths for direct connection
             self.db_path = self.db_path
             self.repeater_db_path = self.repeater_db_path
@@ -145,6 +148,47 @@ class BotDataViewer:
         except Exception as e:
             self.logger.error(f"Failed to initialize databases: {e}")
             raise
+    
+    def _init_packet_stream_table(self):
+        """Initialize the packet_stream table in bot_data.db"""
+        try:
+            # Get database path from config
+            db_path = self.config.get('Database', 'path', fallback='bot_data.db')
+            
+            # Connect to database and create table if it doesn't exist
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Create packet_stream table with schema matching the INSERT statements
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS packet_stream (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    data TEXT NOT NULL,
+                    type TEXT NOT NULL
+                )
+            ''')
+            
+            # Create index on timestamp for faster queries
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_packet_stream_timestamp 
+                ON packet_stream(timestamp)
+            ''')
+            
+            # Create index on type for filtering by type
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_packet_stream_type 
+                ON packet_stream(type)
+            ''')
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Initialized packet_stream table in {db_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize packet_stream table: {e}")
+            # Don't raise - allow web viewer to continue even if table init fails
     
     def _get_db_connection(self):
         """Get database connection - create new connection for each request to avoid threading issues"""
@@ -444,8 +488,7 @@ class BotDataViewer:
                 'subscribed_packets': False
             }
             
-            # Send welcome message
-            emit('status', {'message': 'Connected to MeshCore Bot Data Viewer'})
+            # Connection status is shown via the green indicator in the navbar, no toast needed
             self.logger.info(f"Client {client_id} connected. Total clients: {len(self.connected_clients)}")
         
         @self.socketio.on('disconnect')

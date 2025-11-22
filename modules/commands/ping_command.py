@@ -18,7 +18,7 @@ class PingCommand(BaseCommand):
     category = "basic"
     
     def get_help_text(self) -> str:
-        return self.description
+        return self.translate('commands.ping.description')
     
     def get_response_format(self) -> str:
         """Get the response format from config"""
