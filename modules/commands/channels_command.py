@@ -20,7 +20,7 @@ class ChannelsCommand(BaseCommand):
     category = "basic"
     
     def get_help_text(self) -> str:
-        return "Lists hashtag channels with sub-categories. Use 'channels' for general, 'channels list' for all categories, 'channels <category>' for specific categories, 'channels #channel' for specific channel info."
+        return self.translate('commands.channels.help')
     
     def matches_keyword(self, message: MeshMessage) -> bool:
         """Check if this command matches the message content based on keywords"""
@@ -107,9 +107,9 @@ class ChannelsCommand(BaseCommand):
             
             if not channels:
                 if sub_command:
-                    await self.send_response(message, f"No channels configured for '{sub_command}'. Use 'channels' for general channels.")
+                    await self.send_response(message, self.translate('commands.channels.no_channels_for_category', category=sub_command))
                 else:
-                    await self.send_response(message, "No channels configured. Contact admin to add channels.")
+                    await self.send_response(message, self.translate('commands.channels.no_channels_configured'))
                 return True
             
             # Build channel list (names only, no descriptions)
@@ -127,7 +127,7 @@ class ChannelsCommand(BaseCommand):
             
         except Exception as e:
             self.logger.error(f"Error in channels command: {e}")
-            await self.send_response(message, f"Error retrieving channels: {e}")
+            await self.send_response(message, self.translate('commands.channels.error_retrieving_channels', error=str(e)))
             return False
     
     def _load_channels_from_config(self, sub_command: str = None) -> dict:
@@ -169,13 +169,13 @@ class ChannelsCommand(BaseCommand):
             categories = self._get_all_categories()
             
             if not categories:
-                await self.send_response(message, "No channel categories configured.")
+                await self.send_response(message, self.translate('commands.channels.no_categories_configured'))
                 return
             
             # Build category list
             category_list = []
             for category, count in categories.items():
-                category_list.append(f"{category} ({count} channels)")
+                category_list.append(self.translate('commands.channels.category_count', category=category, count=count))
             
             # Split into multiple messages if needed
             messages = self._split_into_messages(category_list, "Available categories")
@@ -185,7 +185,7 @@ class ChannelsCommand(BaseCommand):
                 
         except Exception as e:
             self.logger.error(f"Error showing categories: {e}")
-            await self.send_response(message, f"Error retrieving categories: {e}")
+            await self.send_response(message, self.translate('commands.channels.error_retrieving_categories', error=str(e)))
     
     def _get_all_categories(self) -> dict:
         """Get all available channel categories and their channel counts"""
@@ -252,7 +252,7 @@ class ChannelsCommand(BaseCommand):
                 else:
                     config_key = f"{found_category}.{found_channel[1:]}"  # Remove #
                 
-                description = self.bot.config.get('Channels_List', config_key, fallback='No description available')
+                description = self.bot.config.get('Channels_List', config_key, fallback=self.translate('commands.channels.no_description_available'))
                 
                 # Strip quotes if present
                 if description.startswith('"') and description.endswith('"'):
@@ -261,11 +261,11 @@ class ChannelsCommand(BaseCommand):
                 response = f"{found_channel}: {description}"
                 await self.send_response(message, response)
             else:
-                await self.send_response(message, f"Channel {channel_name} not found. Use 'channels list' to see available channels.")
+                await self.send_response(message, self.translate('commands.channels.channel_not_found', channel=channel_name))
                 
         except Exception as e:
             self.logger.error(f"Error showing specific channel: {e}")
-            await self.send_response(message, f"Error retrieving channel info: {e}")
+            await self.send_response(message, self.translate('commands.channels.error_retrieving_channel_info', error=str(e)))
     
     def _split_into_messages(self, channel_list: list, sub_command: str = None) -> list:
         """Split channel list into multiple messages if they exceed 130 characters"""
@@ -283,19 +283,20 @@ class ChannelsCommand(BaseCommand):
                 
                 if current_message != expected_header:
                     messages.append(current_message.rstrip(", "))
-                    current_message = "Channels (cont): "
+                    current_message = self.translate('commands.channels.headers.channels_cont')
                     current_length = len(current_message)
                 else:
                     # If even the first channel is too long, just send it alone
                     messages.append(f"{expected_header}{channel}")
-                    current_message = "Channels (cont): "
+                    current_message = self.translate('commands.channels.headers.channels_cont')
                     current_length = len(current_message)
                     continue
             
             # Add channel to current message
             initial_header = self._get_header_for_subcommand(sub_command)
             continuation_header = self._get_continuation_header_for_subcommand(sub_command)
-            if current_message == initial_header or current_message == continuation_header or current_message == "Channels (cont): ":
+            channels_cont = self.translate('commands.channels.headers.channels_cont')
+            if current_message == initial_header or current_message == continuation_header or current_message == channels_cont:
                 current_message += channel
             else:
                 current_message += f", {channel}"
@@ -303,35 +304,36 @@ class ChannelsCommand(BaseCommand):
         
         # Add the last message if it has content
         header = self._get_continuation_header_for_subcommand(sub_command)
-        if current_message != header and current_message != "Channels (cont): ":
+        channels_cont = self.translate('commands.channels.headers.channels_cont')
+        if current_message != header and current_message != channels_cont:
             messages.append(current_message)
         
         # If no messages were created, send a default message
         if not messages:
             if sub_command:
-                messages.append(f"No {sub_command} channels configured")
+                messages.append(self.translate('commands.channels.no_category_channels', category=sub_command))
             else:
-                messages.append("No channels configured")
+                messages.append(self.translate('commands.channels.no_channels_configured'))
         
         return messages
     
     def _get_header_for_subcommand(self, sub_command: str = None) -> str:
         """Get the appropriate header for a sub-command"""
         if sub_command == "Available categories":
-            return "Available Categories: "
+            return self.translate('commands.channels.headers.available_categories')
         elif sub_command and sub_command != "general":
-            return f"{sub_command.title()}: "
+            return self.translate('commands.channels.headers.category', category=sub_command.title())
         else:
-            return "Common channels: "
+            return self.translate('commands.channels.headers.common_channels')
     
     def _get_continuation_header_for_subcommand(self, sub_command: str = None) -> str:
         """Get the appropriate header for continuation messages"""
         if sub_command == "Available categories":
-            return "Available Categories: "
+            return self.translate('commands.channels.headers.available_categories')
         elif sub_command and sub_command != "general":
-            return f"{sub_command.title()} channels: "
+            return self.translate('commands.channels.headers.category_channels', category=sub_command.title())
         else:
-            return "Common channels: "
+            return self.translate('commands.channels.headers.common_channels_cont')
     
     async def _send_multiple_messages(self, message: MeshMessage, messages: list):
         """Send multiple messages with delays between them"""

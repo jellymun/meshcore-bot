@@ -44,7 +44,7 @@ class SatpassCommand(BaseCommand):
             # Extract satellite identifier from command
             parts = content.split()
             if len(parts) < 2:
-                error_msg = "Please provide a satellite NORAD number or shortcut. Example: satpass iss"
+                error_msg = self.translate('commands.satpass.no_satellite')
                 await self.send_response(message, error_msg)
                 return True
             
@@ -68,18 +68,18 @@ class SatpassCommand(BaseCommand):
             pass_info = get_next_satellite_pass(satellite, use_visual=use_visual)
             
             # Send response
-            response = f"🛰️ Satellite Pass:\n{pass_info}"
+            response = self.translate('commands.satpass.header', pass_info=pass_info)
             await self.send_response(message, response)
             return True
             
         except Exception as e:
-            error_msg = f"Error getting satellite pass info: {e}"
+            error_msg = self.translate('commands.satpass.error', error=str(e))
             await self.send_response(message, error_msg)
             return False
     
     def _get_help_text(self):
         """Get detailed help text with shortcuts"""
-        shortcuts_text = "🛰️ Satellite Pass Info\n\nUsage: satpass <NORAD_number_or_shortcut>\n\nShortcuts:\n"
+        shortcuts_text = self.translate('commands.satpass.help_header')
         
         # Group shortcuts by category for better organization
         weather_sats = ['noaa15', 'noaa18', 'noaa19', 'metop-a', 'metop-b', 'metop-c', 'goes16', 'goes17', 'goes18']
@@ -88,29 +88,29 @@ class SatpassCommand(BaseCommand):
         other = ['starlink']
         
         # Add weather satellites
-        shortcuts_text += "🌤️ Weather: "
+        shortcuts_text += self.translate('commands.satpass.category_weather')
         weather_list = [f"{name} ({self.SATELLITE_SHORTCUTS[name]})" for name in weather_sats if name in self.SATELLITE_SHORTCUTS]
         shortcuts_text += ", ".join(weather_list) + "\n"
         
         # Add space stations
-        shortcuts_text += "🚀 Stations: "
+        shortcuts_text += self.translate('commands.satpass.category_stations')
         station_list = [f"{name} ({self.SATELLITE_SHORTCUTS[name]})" for name in space_stations if name in self.SATELLITE_SHORTCUTS]
         shortcuts_text += ", ".join(station_list) + "\n"
         
         # Add telescopes
-        shortcuts_text += "🔭 Telescopes: "
+        shortcuts_text += self.translate('commands.satpass.category_telescopes')
         telescope_list = [f"{name} ({self.SATELLITE_SHORTCUTS[name]})" for name in telescopes if name in self.SATELLITE_SHORTCUTS]
         shortcuts_text += ", ".join(telescope_list) + "\n"
         
         # Add other satellites
-        shortcuts_text += "🛰️ Other: "
+        shortcuts_text += self.translate('commands.satpass.category_other')
         other_list = [f"{name} ({self.SATELLITE_SHORTCUTS[name]})" for name in other if name in self.SATELLITE_SHORTCUTS]
         shortcuts_text += ", ".join(other_list) + "\n"
         
-        shortcuts_text += "\nExamples:\n• satpass iss\n• satpass noaa15\n• satpass 25544\n• satpass 27607 visual (visual passes only)"
+        shortcuts_text += self.translate('commands.satpass.examples')
         
         return shortcuts_text
     
     def get_help_text(self):
         """Get help text for this command"""
-        return self.description
+        return self.translate('commands.satpass.description')

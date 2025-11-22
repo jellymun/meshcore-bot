@@ -22,13 +22,13 @@ class HfcondCommand(BaseCommand):
             hf_info = hf_band_conditions()
             
             # Send response using unified method
-            response = f"📡 HF Band Conditions:\n{hf_info}"
+            response = self.translate('commands.hfcond.header', info=hf_info)
             return await self.send_response(message, response)
             
         except Exception as e:
-            error_msg = f"Error getting HF conditions: {e}"
+            error_msg = self.translate('commands.hfcond.error', error=str(e))
             return await self.send_response(message, error_msg)
     
     def get_help_text(self):
         """Get help text for this command"""
-        return "Get HF band conditions for ham radio"
+        return self.translate('commands.hfcond.help')

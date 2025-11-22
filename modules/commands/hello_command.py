@@ -21,8 +21,13 @@ class HelloCommand(BaseCommand):
     def __init__(self, bot):
         super().__init__(bot)
         
+        # Fallback arrays if translations not available
+        self._init_fallback_arrays()
+    
+    def _init_fallback_arrays(self):
+        """Initialize fallback arrays for when translations are not available"""
         # Time-neutral greeting openings
-        self.greeting_openings = [
+        self.greeting_openings_fallback = [
             "Hello", "Greetings", "Salutations", "Hi", "Hey", "Howdy", "Yo", "Sup", 
             "What's up", "Good day", "Well met", "Hail", "Ahoy", "Bonjour", "Hola", 
             "Ciao", "Namaste", "Aloha", "Shalom", "Konnichiwa", "Guten tag", "G'day", 
@@ -32,26 +37,26 @@ class HelloCommand(BaseCommand):
         ]
         
         # Time-based greeting openings
-        self.morning_greetings = [
+        self.morning_greetings_fallback = [
             "Good morning", "Top o' the morning", "Buenos dias", "Bonjour", 
             "Guten morgen", "Buongiorno", "Bom dia", "Dobro jutro", "Dobroye utro",
             "Selamat pagi", "Ohayou gozaimasu", "Sabah al-khair", "Boker tov"
         ]
         
-        self.afternoon_greetings = [
+        self.afternoon_greetings_fallback = [
             "Good afternoon", "Buenas tardes", "Boa tarde", "Dobro dan", 
             "Dobryy den", "Selamat siang", "Konnichiwa", "Ahlan bi-nahar", 
             "Tzoharaim tovim"
         ]
         
-        self.evening_greetings = [
+        self.evening_greetings_fallback = [
             "Good evening", "Buenas noches", "Boa noite", "Dobro veče", 
             "Dobryy vecher", "Selamat malam", "Konbanwa", "Ahlan bi-layl", 
             "Erev tov"
         ]
         
         # Randomized human descriptors
-        self.human_descriptors = [
+        self.human_descriptors_fallback = [
             # Classic robot references
             "human", "carbon-based lifeform", "organic entity", "biological unit", 
             "flesh creature", "meat-based organism", "carbon unit", "organic being", 
@@ -80,7 +85,7 @@ class HelloCommand(BaseCommand):
         ]
         
         # Emoji greeting responses
-        self.emoji_responses = {
+        self.emoji_responses_fallback = {
             '🖖': [
                 "🖖 Live long and prosper!",
                 "🖖 Fascinating... a human has initiated contact.",
@@ -166,8 +171,50 @@ class HelloCommand(BaseCommand):
             ]
         }        
     
+    def get_greeting_openings(self) -> list:
+        """Get greeting openings from translations or fallback"""
+        openings = self.translate_get_value('commands.hello.greeting_openings')
+        if openings and isinstance(openings, list) and len(openings) > 0:
+            return openings
+        return self.greeting_openings_fallback
+    
+    def get_morning_greetings(self) -> list:
+        """Get morning greetings from translations or fallback"""
+        greetings = self.translate_get_value('commands.hello.morning_greetings')
+        if greetings and isinstance(greetings, list) and len(greetings) > 0:
+            return greetings
+        return self.morning_greetings_fallback
+    
+    def get_afternoon_greetings(self) -> list:
+        """Get afternoon greetings from translations or fallback"""
+        greetings = self.translate_get_value('commands.hello.afternoon_greetings')
+        if greetings and isinstance(greetings, list) and len(greetings) > 0:
+            return greetings
+        return self.afternoon_greetings_fallback
+    
+    def get_evening_greetings(self) -> list:
+        """Get evening greetings from translations or fallback"""
+        greetings = self.translate_get_value('commands.hello.evening_greetings')
+        if greetings and isinstance(greetings, list) and len(greetings) > 0:
+            return greetings
+        return self.evening_greetings_fallback
+    
+    def get_human_descriptors(self) -> list:
+        """Get human descriptors from translations or fallback"""
+        descriptors = self.translate_get_value('commands.hello.human_descriptors')
+        if descriptors and isinstance(descriptors, list) and len(descriptors) > 0:
+            return descriptors
+        return self.human_descriptors_fallback
+    
+    def get_emoji_responses(self) -> dict:
+        """Get emoji responses from translations or fallback"""
+        responses = self.translate_get_value('commands.hello.emoji_responses')
+        if responses and isinstance(responses, dict) and len(responses) > 0:
+            return responses
+        return self.emoji_responses_fallback        
+    
     def get_help_text(self) -> str:
-        return self.description
+        return self.translate('commands.hello.help')
     
     def matches_custom_syntax(self, message: MeshMessage) -> bool:
         """Check if message contains only defined emojis"""
@@ -184,7 +231,8 @@ class HelloCommand(BaseCommand):
         else:
             # Get random robot greeting
             random_greeting = self.get_random_greeting()
-            response = f"{random_greeting} I'm {bot_name}."
+            response_format = self.translate('commands.hello.response_format')
+            response = f"{random_greeting} {response_format}".format(bot_name=bot_name)
         
         return await self.send_response(message, response)
     
@@ -211,18 +259,25 @@ class HelloCommand(BaseCommand):
         # Get current hour to determine time of day
         current_hour = current_time.hour
         
+        # Get greeting arrays from translations or fallback
+        greeting_openings = self.get_greeting_openings()
+        morning_greetings = self.get_morning_greetings()
+        afternoon_greetings = self.get_afternoon_greetings()
+        evening_greetings = self.get_evening_greetings()
+        human_descriptors = self.get_human_descriptors()
+        
         # Choose appropriate greeting based on time of day
         if 5 <= current_hour < 12:  # Morning (5 AM - 12 PM)
-            greeting_pool = self.morning_greetings + self.greeting_openings
+            greeting_pool = morning_greetings + greeting_openings
         elif 12 <= current_hour < 17:  # Afternoon (12 PM - 5 PM)
-            greeting_pool = self.afternoon_greetings + self.greeting_openings
+            greeting_pool = afternoon_greetings + greeting_openings
         elif 17 <= current_hour < 22:  # Evening (5 PM - 10 PM)
-            greeting_pool = self.evening_greetings + self.greeting_openings
+            greeting_pool = evening_greetings + greeting_openings
         else:  # Night/Late night (10 PM - 5 AM)
-            greeting_pool = self.evening_greetings + self.greeting_openings
+            greeting_pool = evening_greetings + greeting_openings
         
         opening = random.choice(greeting_pool)
-        descriptor = random.choice(self.human_descriptors)
+        descriptor = random.choice(human_descriptors)
         
         # Add some variety in punctuation and formatting
         punctuation_options = ["!", ".", "!", "!", "!"]  # Favor exclamation marks
@@ -253,14 +308,18 @@ class HelloCommand(BaseCommand):
         """Get appropriate response for emoji-only message"""
         import random
         
+        # Get emoji responses from translations or fallback
+        emoji_responses = self.get_emoji_responses()
+        response_format = self.translate('commands.hello.response_format')
+        
         # Extract the first emoji from the message
         first_emoji = text.strip().split()[0] if text.strip() else ""
         
         # Check if this emoji has special responses
-        if first_emoji in self.emoji_responses:
-            response = random.choice(self.emoji_responses[first_emoji])
-            return f"{response} I'm {bot_name}."
+        if first_emoji in emoji_responses:
+            response = random.choice(emoji_responses[first_emoji])
+            return f"{response} {response_format}".format(bot_name=bot_name)
         else:
             # Use random greeting generator for general emojis
             random_greeting = self.get_random_greeting()
-            return f"{random_greeting} I'm {bot_name}."
+            return f"{random_greeting} {response_format}".format(bot_name=bot_name)

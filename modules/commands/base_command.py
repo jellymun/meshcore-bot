@@ -27,6 +27,39 @@ class BaseCommand(ABC):
         self.logger = bot.logger
         self._last_execution_time = 0
     
+        # Load translated keywords after initialization
+        self._load_translated_keywords()
+    
+    def translate(self, key: str, **kwargs) -> str:
+        """
+        Translate a key using the bot's translator
+        
+        Args:
+            key: Dot-separated key path (e.g., 'commands.wx.usage')
+            **kwargs: Formatting parameters for string.format()
+        
+        Returns:
+            Translated string, or key if translation not found
+        """
+        if hasattr(self.bot, 'translator'):
+            return self.bot.translator.translate(key, **kwargs)
+        # Fallback if translator not available
+        return key
+    
+    def translate_get_value(self, key: str) -> Any:
+        """
+        Get a raw value from translations (can be string, list, dict, etc.)
+        
+        Args:
+            key: Dot-separated key path (e.g., 'commands.hacker.sudo_errors')
+        
+        Returns:
+            The value at the key path, or None if not found
+        """
+        if hasattr(self.bot, 'translator'):
+            return self.bot.translator.get_value(key)
+        return None
+    
     def get_config_value(self, section: str, key: str, fallback=None, value_type: str = 'str'):
         """
         Get config value with backward compatibility for section name changes.
@@ -154,6 +187,34 @@ class BaseCommand(ABC):
         elapsed = current_time - self._last_execution_time
         remaining = self.cooldown_seconds - elapsed
         return max(0, int(remaining))
+    
+    def _load_translated_keywords(self):
+        """Load translated keywords from translation files"""
+        if not hasattr(self.bot, 'translator'):
+            self.logger.debug(f"Translator not available for {self.name}, skipping keyword loading")
+            return
+        
+        try:
+            # Get translated keywords for this command
+            key = f"keywords.{self.name}"
+            translated_keywords = self.bot.translator.get_value(key)
+            
+            if translated_keywords and isinstance(translated_keywords, list):
+                # Merge translated keywords with original keywords (avoid duplicates)
+                original_count = len(self.keywords)
+                all_keywords = list(self.keywords)  # Start with original
+                for translated_keyword in translated_keywords:
+                    if translated_keyword not in all_keywords:
+                        all_keywords.append(translated_keyword)
+                self.keywords = all_keywords
+                added_count = len(self.keywords) - original_count
+                if added_count > 0:
+                    self.logger.debug(f"Loaded {added_count} translated keyword(s) for {self.name}: {self.keywords}")
+            else:
+                self.logger.debug(f"No translated keywords found for {self.name} (key: {key})")
+        except Exception as e:
+            # Log the error for debugging
+            self.logger.debug(f"Could not load translated keywords for {self.name}: {e}")
     
     def matches_keyword(self, message: MeshMessage) -> bool:
         """Check if this command matches the message content based on keywords"""

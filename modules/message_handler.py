@@ -13,6 +13,7 @@ from meshcore import EventType
 
 from .models import MeshMessage
 from .enums import PayloadType, PayloadVersion, RouteType, AdvertFlags, DeviceRole
+from .utils import calculate_packet_hash
 
 
 class MessageHandler:
@@ -39,6 +40,9 @@ class MessageHandler:
         # Enhanced RF data storage with better correlation
         self.rf_data_by_timestamp = {}  # Index by timestamp for faster lookup
         self.rf_data_by_pubkey = {}     # Index by pubkey for exact matches
+        
+        # Multitest command listener (for collecting paths during listening window)
+        self.multitest_listener = None
         
         self.logger.info(f"RF Data Correlation: timeout={self.rf_data_timeout}s, enhanced={self.enhanced_correlation}")
     
@@ -469,17 +473,29 @@ class MessageHandler:
                     
                     # Extract routing information from raw packet if available
                     routing_info = None
+                    packet_hash = None
                     if raw_hex:
                         # Use extracted payload if available, otherwise use raw_hex
                         decoded_packet = self.decode_meshcore_packet(raw_hex, extracted_payload)
                         if decoded_packet:
+                            # Calculate packet hash for this packet (useful for tracking same message via different paths)
+                            # Ensure we use the numeric payload_type value (not enum or string)
+                            payload_type_value = decoded_packet.get('payload_type', None)
+                            if payload_type_value is not None:
+                                # Handle enum.value if it's an enum
+                                if hasattr(payload_type_value, 'value'):
+                                    payload_type_value = payload_type_value.value
+                                payload_type_value = int(payload_type_value)
+                            packet_hash = calculate_packet_hash(raw_hex, payload_type_value)
+                            
                             routing_info = {
                                 'path_length': decoded_packet.get('path_len', 0),
                                 'path_hex': decoded_packet.get('path_hex', ''),
                                 'path_nodes': decoded_packet.get('path', []),
                                 'route_type': decoded_packet.get('route_type_name', 'Unknown'),
                                 'payload_length': payload_length,  # Use the actual payload length
-                                'payload_type': decoded_packet.get('payload_type_name', 'Unknown')
+                                'payload_type': decoded_packet.get('payload_type_name', 'Unknown'),
+                                'packet_hash': packet_hash  # Store hash for packet tracking
                             }
                             
                             # Log the routing information for analysis
@@ -518,7 +534,8 @@ class MessageHandler:
                         'raw_hex': raw_hex,  # Full packet data
                         'payload': extracted_payload,  # Extracted payload
                         'payload_length': payload_length,  # Payload length
-                        'routing_info': routing_info  # Extracted routing information
+                        'routing_info': routing_info,  # Extracted routing information
+                        'packet_hash': packet_hash  # Packet hash for tracking same message via different paths
                     }
                     self.recent_rf_data.append(rf_data)
                     
@@ -1512,6 +1529,13 @@ class MessageHandler:
     
     async def process_message(self, message: MeshMessage):
         """Process a received message"""
+        # Check if multitest is listening and notify it
+        if self.multitest_listener:
+            try:
+                self.multitest_listener.on_message_received(message)
+            except Exception as e:
+                self.logger.debug(f"Error notifying multitest listener: {e}")
+        
         # Record all messages in stats database FIRST (before any filtering)
         # This ensures we collect stats for all channels, not just monitored ones
         if 'stats' in self.bot.command_manager.commands:
@@ -1538,7 +1562,12 @@ class MessageHandler:
         plugin_command_with_response_matched = False
         if keyword_matches:
             for keyword, response in keyword_matches:
-                self.logger.info(f"Keyword '{keyword}' matched, responding")
+                # Use translator if available for logging
+                if hasattr(self.bot, 'translator'):
+                    log_msg = self.bot.translator.translate('messages.keyword_matched', keyword=keyword)
+                    self.logger.info(log_msg)
+                else:
+                    self.logger.info(f"Keyword '{keyword}' matched, responding")
                 
                 # Record command execution in stats database
                 if 'stats' in self.bot.command_manager.commands:

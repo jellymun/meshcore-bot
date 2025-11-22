@@ -85,6 +85,21 @@ bot_latitude = 40.7128
 # Example: -74.0060 for New York City, -123.00 for Victoria BC
 bot_longitude = -74.0060
 
+[Localization]
+# Language code for bot responses (en, es, es-MX, es-ES, fr, de, ja, etc.)
+# Default: en (English)
+# The bot will use translations from translations/{language}.json
+# Supports locale codes:
+#   - Simple codes: en, es, fr, de, ja
+#   - Locale codes: es-MX (Mexican Spanish), es-ES (Spain Spanish), fr-CA (Canadian French)
+# If locale-specific file not found, falls back to base language (e.g., es.json)
+# If translation file is missing or key not found, falls back to English
+language = en
+
+# Path to translation files directory (relative to bot root)
+# Default: translations/
+translation_path = translations/
+
 [Admin_ACL]
 # Admin Access Control List (ACL) for restricted commands
 # Only users with public keys listed here can execute admin commands
@@ -171,14 +186,16 @@ advert_interval_hours = 0
 
 [Keywords]
 # Keyword-response pairs (keyword = response format)
-# Available fields: {sender}, {connection_info}, {snr}, {timestamp}, {path}
+# Available fields: {sender}, {connection_info}, {snr}, {timestamp}, {path}, {path_distance}, {firstlast_distance}
 # {sender}: Name/ID of message sender
 # {connection_info}: "Direct connection (0 hops)" or "Routed through X hops"
 # {snr}: Signal-to-noise ratio in dB
 # {timestamp}: Message timestamp in HH:MM:SS format
 # {path}: Message routing path (e.g., "01,5f (2 hops)")
 # {rssi}: Received Signal Strength Indicator in dBm
-test = "ack {sender}{phrase_part} | {connection_info} | Received at: {timestamp}"
+# {path_distance}: Total distance between all hops in path with locations (e.g., "123.4km (3 segs, 1 no-loc)")
+# {firstlast_distance}: Distance between first and last repeater in path (e.g., "45.6km" or empty if locations missing)
+test = "ack @[{sender}]{phrase_part} | {connection_info} | Received at: {timestamp}"
 ping = "Pong!"
 pong = "Ping!"
 help = "Bot Help: test (or t), ping, help, hello, cmd, advert, @string, wx, aqi, sun, moon, solar, hfcond, satpass, prefix, path, sports, dice, roll, stats | Use 'help <command>' for details"
@@ -235,8 +252,10 @@ meshcore_log_level = INFO
 [Custom_Syntax]
 # Custom syntax patterns for special message formats
 # Format: pattern = "response_format"
-# Available fields: {sender}, {phrase}, {connection_info}, {snr}, {timestamp}, {path}
+# Available fields: {sender}, {phrase}, {connection_info}, {snr}, {timestamp}, {path}, {path_distance}, {firstlast_distance}
 # {phrase}: The text after the trigger (for custom syntax patterns)
+# {path_distance}: Total distance between all hops in path with locations (e.g., "123.4km (3 segs, 1 no-loc)")
+# {firstlast_distance}: Distance between first and last repeater in path (e.g., "45.6km" or empty if locations missing)
 # 
 # Note: The "t" command is now handled by the test command as an alias
 # "t phrase" works the same as "test phrase" - both use the test response format

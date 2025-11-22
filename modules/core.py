@@ -31,6 +31,10 @@ from .command_manager import CommandManager
 from .channel_manager import ChannelManager
 from .scheduler import MessageScheduler
 from .repeater_manager import RepeaterManager
+from .db_manager import DBManager
+from .i18n import Translator
+from .solar_conditions import set_config
+from .web_viewer.integration import WebViewerIntegration
 
 
 class MeshCoreBot:
@@ -55,7 +59,6 @@ class MeshCoreBot:
         db_path = self.config.get('Bot', 'db_path', fallback='meshcore_bot.db')
         self.logger.info(f"Initializing database manager with database: {db_path}")
         try:
-            from .db_manager import DBManager
             self.db_manager = DBManager(self, db_path)
             self.logger.info("Database manager initialized successfully")
         except Exception as e:
@@ -71,7 +74,6 @@ class MeshCoreBot:
         
         # Initialize web viewer integration (after database manager)
         try:
-            from .web_viewer.integration import WebViewerIntegration
             self.web_viewer_integration = WebViewerIntegration(self)
             self.logger.info("Web viewer integration initialized")
             
@@ -89,6 +91,27 @@ class MeshCoreBot:
             self.config.getfloat('Bot', 'bot_tx_rate_limit_seconds', fallback=1.0)
         )
         self.tx_delay_ms = self.config.getint('Bot', 'tx_delay_ms', fallback=250)
+        
+        # Initialize translator for localization BEFORE CommandManager
+        # This ensures translated keywords are available when commands are loaded
+        try:
+            language = self.config.get('Localization', 'language', fallback='en')
+            translation_path = self.config.get('Localization', 'translation_path', fallback='translations/')
+            self.translator = Translator(language, translation_path)
+            self.logger.info(f"Localization initialized: {language}")
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize translator: {e}")
+            # Create a dummy translator that just returns keys
+            class DummyTranslator:
+                def translate(self, key, **kwargs):
+                    return key
+                def get_value(self, key):
+                    return None
+            self.translator = DummyTranslator()
+        
+        # Initialize solar conditions configuration
+        set_config(self.config)
+        
         self.message_handler = MessageHandler(self)
         self.command_manager = CommandManager(self)
         self.channel_manager = ChannelManager(self)
@@ -103,9 +126,12 @@ class MeshCoreBot:
             self.logger.error(f"Failed to initialize repeater manager: {e}")
             raise
         
-        # Initialize solar conditions configuration
-        from .solar_conditions import set_config
-        set_config(self.config)
+        # Reload translated keywords for all commands now that translator is available
+        # This ensures keywords are loaded even if translator wasn't ready during command init
+        if hasattr(self, 'command_manager') and hasattr(self, 'translator'):
+            for cmd_name, cmd_instance in self.command_manager.commands.items():
+                if hasattr(cmd_instance, '_load_translated_keywords'):
+                    cmd_instance._load_translated_keywords()
         
         # Advert tracking
         self.last_advert_time = None
@@ -255,14 +281,16 @@ admin_commands = repeater
 
 [Keywords]
 # Keyword-response pairs (keyword = response format)
-# Available fields: {sender}, {connection_info}, {snr}, {rssi}, {timestamp}, {path}
+# Available fields: {sender}, {connection_info}, {snr}, {rssi}, {timestamp}, {path}, {path_distance}, {firstlast_distance}
 # {sender}: Name/ID of message sender
 # {connection_info}: Path info, SNR, and RSSI combined (e.g., "01,5f (2 hops) | SNR: 15 dB | RSSI: -120 dBm")
 # {snr}: Signal-to-noise ratio in dB
 # {rssi}: Received signal strength indicator in dBm
 # {timestamp}: Message timestamp in HH:MM:SS format
 # {path}: Message routing path (e.g., "01,5f (2 hops)")
-test = "ack {sender}{phrase_part} | {connection_info} | Received at: {timestamp}"
+# {path_distance}: Total distance between all hops in path with locations (e.g., "123.4km (3 segs, 1 no-loc)")
+# {firstlast_distance}: Distance between first and last repeater in path (e.g., "45.6km" or empty if locations missing)
+test = "ack [@{sender}]{phrase_part} | {connection_info} | Received at: {timestamp}"
 ping = "Pong!"
 pong = "Ping!"
 help = "Bot Help: test, ping, help, hello, cmd, advert, t phrase, @string, wx, aqi, sun, moon, solar, hfcond, satpass | Use 'help <command>' for details"

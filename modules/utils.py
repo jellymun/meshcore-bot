@@ -5,6 +5,7 @@ Shared helper functions used across multiple modules
 """
 
 import re
+import hashlib
 from typing import Optional
 
 
@@ -250,3 +251,115 @@ def get_major_city_queries(city: str, state_abbr: Optional[str] = None) -> list:
     
     # Not a major city - return empty list (caller should use standard geocoding)
     return []
+
+
+def calculate_packet_hash(raw_hex: str, payload_type: int = None) -> str:
+    """
+    Calculate hash for packet identification - based on packet.cpp
+    Packet hashes are unique to the originally sent message, allowing
+    identification of the same message arriving via different paths.
+    
+    Args:
+        raw_hex: Raw packet data as hex string
+        payload_type: Optional payload type as integer (if None, extracted from header)
+                      Must be numeric value (0-15), not enum or string
+        
+    Returns:
+        16-character hex string (8 bytes) in uppercase, or "0000000000000000" on error
+    """
+    try:
+        # Parse the packet to extract payload type and payload data
+        byte_data = bytes.fromhex(raw_hex)
+        header = byte_data[0]
+        
+        # Get payload type from header (bits 2-5)
+        if payload_type is None:
+            payload_type = (header >> 2) & 0x0F
+        else:
+            # Ensure payload_type is an integer (handle enum.value if passed)
+            if hasattr(payload_type, 'value'):
+                payload_type = payload_type.value
+            payload_type = int(payload_type) & 0x0F  # Ensure it's 0-15
+        
+        # Check if transport codes are present
+        route_type = header & 0x03
+        has_transport = route_type in [0x00, 0x03]  # TRANSPORT_FLOOD or TRANSPORT_DIRECT
+        
+        # Calculate path length offset dynamically based on transport codes
+        offset = 1  # After header
+        if has_transport:
+            offset += 4  # Skip 4 bytes of transport codes
+        
+        # Validate we have enough bytes for path_len
+        if len(byte_data) <= offset:
+            return "0000000000000000"
+        
+        # Read path_len (1 byte on wire, but stored as uint16_t in C++)
+        path_len = byte_data[offset]
+        offset += 1
+        
+        # Validate we have enough bytes for the path
+        if len(byte_data) < offset + path_len:
+            return "0000000000000000"
+        
+        # Skip past the path to get to payload
+        payload_start = offset + path_len
+        
+        # Validate we have payload data
+        if len(byte_data) <= payload_start:
+            return "0000000000000000"
+        
+        payload_data = byte_data[payload_start:]
+        
+        # Calculate hash exactly like MeshCore Packet::calculatePacketHash():
+        # 1. Payload type (1 byte)
+        # 2. Path length (2 bytes as uint16_t, little-endian) - ONLY for TRACE packets (type 9)
+        # 3. Payload data
+        hash_obj = hashlib.sha256()
+        hash_obj.update(bytes([payload_type]))
+        
+        if payload_type == 9:  # PAYLOAD_TYPE_TRACE
+            # C++ does: sha.update(&path_len, sizeof(path_len))
+            # path_len is uint16_t, so sizeof(path_len) = 2 bytes
+            # Convert path_len to 2-byte little-endian uint16_t
+            hash_obj.update(path_len.to_bytes(2, byteorder='little'))
+        
+        hash_obj.update(payload_data)
+        
+        # Return first 16 hex characters (8 bytes) in uppercase
+        return hash_obj.hexdigest()[:16].upper()
+    except Exception as e:
+        # Return default hash on error (caller should handle logging)
+        return "0000000000000000"
+
+
+def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate haversine distance between two points in kilometers.
+    
+    Args:
+        lat1: Latitude of first point in degrees
+        lon1: Longitude of first point in degrees
+        lat2: Latitude of second point in degrees
+        lon2: Longitude of second point in degrees
+        
+    Returns:
+        Distance in kilometers
+    """
+    import math
+    
+    # Convert latitude and longitude from degrees to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+    
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    
+    # Earth's radius in kilometers
+    earth_radius = 6371.0
+    return earth_radius * c

@@ -18,7 +18,7 @@ class HelpCommand(BaseCommand):
     category = "basic"
     
     def get_help_text(self) -> str:
-        return self.description
+        return self.translate('commands.help.description')
     
     async def execute(self, message: MeshMessage) -> bool:
         """Execute the help command"""
@@ -53,27 +53,18 @@ class HelpCommand(BaseCommand):
                     # Fallback for commands that don't accept message parameter
                     help_text = command.get_help_text()
             else:
-                help_text = "No help available"
-            return f"**Help for '{command_name}':**\n{help_text}"
+                help_text = self.translate('commands.help.no_help')
+            return self.translate('commands.help.specific', command=command_name, help_text=help_text)
         else:
-            return f"**Unknown command: '{command_name}'**\n\nAvailable commands:\n" + self.get_available_commands_list()
+            available = self.get_available_commands_list()
+            return self.translate('commands.help.unknown', command=command_name, available=available)
     
     def get_general_help(self) -> str:
         """Get general help text"""
-        help_text = "**MeshCore Bot Help**\n\n"
-        help_text += "**Available Commands:**\n"
-        help_text += self.get_available_commands_list()
-        help_text += "\n**Usage Examples:**\n"
-        help_text += "• `help @` - Get help for @{string} syntax\n"
-        help_text += "• `help t` - Get help for t {string} syntax\n"
-        help_text += "• `help advert` - Get help for advert command\n"
-        help_text += "• `help test` - Get help for test command\n"
-        help_text += "• `help ping` - Get help for ping command\n"
-        help_text += "\n**Custom Syntax:**\n"
-        help_text += "• `t phrase` - Acknowledgment with phrase (channels & DMs)\n"
-        help_text += "• `@{string}` - Acknowledgment with string (DMs only)\n"
-        help_text += "• `advert` - Send flood advert (DMs only, 1-hour cooldown)\n"
-        
+        commands_list = self.get_available_commands_list()
+        help_text = self.translate('commands.help.general', commands_list=commands_list)
+        help_text += self.translate('commands.help.usage_examples')
+        help_text += self.translate('commands.help.custom_syntax')
         return help_text
     
     def get_available_commands_list(self) -> str:

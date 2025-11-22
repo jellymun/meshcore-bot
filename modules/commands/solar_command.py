@@ -27,12 +27,12 @@ class SolarCommand(BaseCommand):
             solar_info = solar_conditions()
             
             # Send response (solar only, more readable)
-            response = f"☀️ Solar: {solar_info}"
+            response = self.translate('commands.solar.response', info=solar_info)
             
             # Use the unified send_response method
             return await self.send_response(message, response)
             
         except Exception as e:
-            error_msg = f"Error getting solar info: {e}"
+            error_msg = self.translate('commands.solar.error', error=str(e))
             await self.send_response(message, error_msg)
             return False

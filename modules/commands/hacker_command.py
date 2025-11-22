@@ -45,9 +45,18 @@ class HackerCommand(BaseCommand):
         """Get a hilarious error message for the given command"""
         command_lower = command.lower()
         
+        # Try to get errors from translations, fallback to hardcoded if not available
+        def get_random_error(error_key: str, fallback_list: list) -> str:
+            """Get a random error from translations or fallback list"""
+            errors = self.translate_get_value(error_key)
+            if isinstance(errors, list) and len(errors) > 0:
+                return random.choice(errors)
+            # Fallback to hardcoded list if translation not available
+            return random.choice(fallback_list)
+        
         # sudo command errors
         if command_lower.startswith('sudo'):
-            sudo_errors = [
+            fallback = [
                 "🚨 ACCESS DENIED: Dr. Evil's mainframe has detected unauthorized privilege escalation attempt!",
                 "💀 ERROR: Sudo permissions revoked by the Dark Overlord. Try again in 1000 years.",
                 "⚡ WARNING: Attempting to access root privileges on the Death Star's computer system. Self-destruct sequence initiated.",
@@ -59,11 +68,11 @@ class HackerCommand(BaseCommand):
                 "💻 HACKER DENIED: The supervillain's antivirus has quarantined your privilege escalation.",
                 "🎯 TARGET LOCKED: The evil corporation's security system has marked you as a threat."
             ]
-            return random.choice(sudo_errors)
+            return get_random_error('commands.hacker.sudo_errors', fallback)
         
         # ps aux command errors
         elif command_lower.startswith('ps aux'):
-            ps_errors = [
+            fallback = [
                 "🔍 SCANNING... ERROR: Process list corrupted by the Borg Collective. Resistance is futile.",
                 "📊 SYSTEM STATUS: All processes have been assimilated by the Cybermen. Exterminate!",
                 "⚙️ PROCESS MONITOR: The Death Star's reactor core is offline. No processes found.",
@@ -75,11 +84,11 @@ class HackerCommand(BaseCommand):
                 "🌐 NETWORK ERROR: All processes have been disconnected from the Matrix.",
                 "⚡ POWER SURGE: The supervillain's server farm has fried all running processes."
             ]
-            return random.choice(ps_errors)
+            return get_random_error('commands.hacker.ps_errors', fallback)
         
         # grep command errors
         elif command_lower.startswith('grep'):
-            grep_errors = [
+            fallback = [
                 "🔍 SEARCH FAILED: The One Ring has corrupted the search index. My precious...",
                 "📝 PATTERN NOT FOUND: The search database has been deleted by the evil AI.",
                 "🎯 MISS: Your search pattern has been shot down by Imperial TIE fighters.",
@@ -91,11 +100,11 @@ class HackerCommand(BaseCommand):
                 "🌐 NETWORK TIMEOUT: The search request got lost in cyberspace.",
                 "⚡ SEARCH FAILED: The pattern matching algorithm has been fried by a power surge."
             ]
-            return random.choice(grep_errors)
+            return get_random_error('commands.hacker.grep_errors', fallback)
         
         # ls -l and ls -la command errors
         elif command_lower.startswith('ls -l') or command_lower.startswith('ls -la'):
-            ls_errors = [
+            fallback = [
                 "📁 DIRECTORY SCAN: The file system has been encrypted by ransomware from the Dark Web.",
                 "🗂️ FILE LISTING: All files have been hidden by the Invisible Man.",
                 "💻 HARD DRIVE CRASHED: The supervillain's storage has been destroyed by a virus.",
@@ -107,11 +116,11 @@ class HackerCommand(BaseCommand):
                 "🌐 CLOUD STORAGE DOWN: The files are stuck in the Matrix's cloud.",
                 "⚡ STORAGE FRIED: The hard drive has been zapped by a power surge."
             ]
-            return random.choice(ls_errors)
+            return get_random_error('commands.hacker.ls_errors', fallback)
         
         # echo $PATH command errors
         elif command_lower.startswith('echo $path'):
-            echo_path_errors = [
+            fallback = [
                 "🛤️ PATH ERROR: The Yellow Brick Road has been destroyed by a tornado.",
                 "🗺️ NAVIGATION FAILED: The GPS coordinates have been scrambled by the Matrix.",
                 "💻 ENVIRONMENT VARIABLE CORRUPTED: The PATH has been hacked by malware.",
@@ -123,11 +132,11 @@ class HackerCommand(BaseCommand):
                 "🌐 NETWORK PATH DOWN: The directory paths are stuck in the Matrix's network.",
                 "⚡ PATH FRIED: The system paths have been zapped by a power surge."
             ]
-            return random.choice(echo_path_errors)
+            return get_random_error('commands.hacker.echo_path_errors', fallback)
         
         # Generic hacker error for other commands
         else:
-            generic_errors = [
+            fallback = [
                 "💻 MAINFRAME ERROR: The supervillain's computer is having a bad day.",
                 "🤖 SYSTEM MALFUNCTION: The evil AI has gone on strike.",
                 "⚡ POWER SURGE: The Death Star's power core is unstable.",
@@ -139,7 +148,7 @@ class HackerCommand(BaseCommand):
                 "👻 HAUNTED: The system is possessed by digital ghosts.",
                 "🎮 GAME CRASH: The mainframe has encountered a fatal error and needs to restart."
             ]
-            return random.choice(generic_errors)
+            return get_random_error('commands.hacker.generic_errors', fallback)
     
     def matches_keyword(self, message: MeshMessage) -> bool:
         """Override to check for command matches (exact for some, prefix for others)"""

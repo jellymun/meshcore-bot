@@ -31,7 +31,7 @@ class DiceCommand(BaseCommand):
     }
     
     def get_help_text(self) -> str:
-        return "Roll dice. Use 'dice' for d6, 'dice d20' for d20, 'dice 2d6' for 2d6, etc."
+        return self.translate('commands.dice.help')
     
     def matches_keyword(self, message: MeshMessage) -> bool:
         """Override to handle dice-specific matching"""
@@ -114,12 +114,12 @@ class DiceCommand(BaseCommand):
         """Format dice roll results into a readable string"""
         if count == 1:
             # Single die roll
-            return f"🎲 d{sides}: {results[0]}"
+            return self.translate('commands.dice.single_die', sides=sides, result=results[0])
         else:
             # Multiple dice
             total = sum(results)
             results_str = ", ".join(map(str, results))
-            return f"🎲 {count}d{sides}: [{results_str}] = {total}"
+            return self.translate('commands.dice.multiple_dice', count=count, sides=sides, results=results_str, total=total)
     
     async def execute(self, message: MeshMessage) -> bool:
         """Execute the dice command"""
@@ -141,7 +141,7 @@ class DiceCommand(BaseCommand):
             if sides is None:
                 # Invalid dice specification
                 available_dice = ", ".join(self.DICE_TYPES.keys())
-                response = f"Invalid dice type. Available: {available_dice}"
+                response = self.translate('commands.dice.invalid_dice_type', available=available_dice)
                 return await self.send_response(message, response)
         
         # Roll the dice

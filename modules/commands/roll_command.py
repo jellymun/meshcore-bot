@@ -20,7 +20,7 @@ class RollCommand(BaseCommand):
     category = "games"
     
     def get_help_text(self) -> str:
-        return "Roll a random number between 1 and X (default 100). Use 'roll' for 1-100, 'roll 50' for 1-50, etc."
+        return self.translate('commands.roll.help')
     
     def matches_keyword(self, message: MeshMessage) -> bool:
         """Override to handle roll-specific matching"""
@@ -70,7 +70,7 @@ class RollCommand(BaseCommand):
     
     def format_roll_result(self, max_num: int, result: int) -> str:
         """Format roll result into a readable string"""
-        return f"🎲 Roll 1-{max_num}: {result}"
+        return self.translate('commands.roll.result', max=max_num, result=result)
     
     async def execute(self, message: MeshMessage) -> bool:
         """Execute the roll command"""
@@ -90,7 +90,7 @@ class RollCommand(BaseCommand):
             
             if max_num is None:
                 # Invalid roll specification
-                response = "Invalid number. Use 'roll' for 1-100, or 'roll X' for 1-X (max 10000)."
+                response = self.translate('commands.roll.invalid_number')
                 return await self.send_response(message, response)
         
         # Roll the number
