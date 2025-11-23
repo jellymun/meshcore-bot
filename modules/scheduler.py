@@ -106,7 +106,13 @@ class MessageScheduler:
             return
 
         # Import here to avoid circular import issues at module level
-        from .models import MeshMessage
+        # NOTE: Assumes .models exists in the same package context
+        try:
+            from .models import MeshMessage
+        except ImportError:
+            # Fallback or error handling if .models is not available
+            self.logger.error("Cannot import MeshMessage from .models. Check module structure.")
+            return
 
         # Construct a MeshMessage that represents the scheduled invocation.
         # Use a scheduler sender id so plugins that check sender can see it's internal.
@@ -145,55 +151,43 @@ class MessageScheduler:
                 self.logger.error("Failed to send error message to channel after invocation failure.")
 
     def send_scheduled_message(self, channel: str, message: str):
-        """Send a scheduled message (synchronous wrapper for schedule library)"""
+        """
+        Send a scheduled message (synchronous wrapper for schedule library).
+        Submits the async task to the bot's main event loop using threadsafe approach.
+        """
         current_time = self.get_current_time()
         self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
         
+        # --- FIX: Use threadsafe submission to the main event loop ---
+        try:
+            # Assumes the running event loop is stored on the bot instance as self.bot.loop
+            bot_loop = self.bot.loop 
+        except AttributeError:
+            self.logger.error("Bot's event loop is not accessible at self.bot.loop. Cannot send message safely.")
+            return
+
         # If message is explicitly meant to be an internal bot command use prefix 'cmd:'
         msg_strip = message.lstrip()
         lower_prefix = msg_strip[:4].lower()
         if lower_prefix == 'cmd:':
             command_text = msg_strip[4:].strip()
             if command_text:
-                # Run the internal command via command_manager using simplified approach
-                try:
-                    # Create a new event loop for this thread if one doesn't exist
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    loop.run_until_complete(self._invoke_internal_command_async(channel, command_text))
-                except Exception as e:
-                    self.logger.exception(f"Failed to run scheduled internal command '{command_text}': {e}")
+                coro = self._invoke_internal_command_async(channel, command_text)
             else:
-                # No command after prefix — send informative message
-                try:
-                    # Create a new event loop for this thread if one doesn't exist
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    loop.run_until_complete(self._send_scheduled_message_async(channel, "No command specified after 'cmd:'."))
-                except Exception:
-                    self.logger.error("Failed to send error message for empty command")
-            return
-
-        # Regular (plain text) scheduled message -> send as-is
-        try:
-            # Create a new event loop for this thread if one doesn't exist
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                coro = self._send_scheduled_message_async(channel, "No command specified after 'cmd:'.")
+        else:
+            # Regular (plain text) scheduled message -> send as-is
+            coro = self._send_scheduled_message_async(channel, message)
             
-            loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+        # Submit the async job to the main bot's event loop from the scheduler thread
+        future = asyncio.run_coroutine_threadsafe(coro, bot_loop)
+        try:
+            # Wait up to 60 seconds for the coroutine to complete
+            future.result(timeout=60) 
+            self.logger.info(f"Scheduled message/command submitted successfully to bot loop.")
         except Exception as e:
-            self.logger.exception(f"Failed to send scheduled message: {e}")
+            self.logger.exception(f"Failed to execute scheduled task via threadsafe submit: {e}")
+            
     
     async def _send_scheduled_message_async(self, channel: str, message: str):
         """Send a scheduled message (async implementation)"""
@@ -228,7 +222,6 @@ class MessageScheduler:
                 last_log_time = time.time()
             
             # Check for pending scheduled messages
-            # NOTE: Reduced logging for routine scheduler checks from info to debug
             pending_jobs = schedule.get_jobs()
             if pending_jobs:
                 self.logger.debug(f"Found {len(pending_jobs)} scheduled jobs")
@@ -268,24 +261,37 @@ class MessageScheduler:
             self.logger.error(f"Error checking interval advertising: {e}")
     
     def send_interval_advert(self):
-        """Send an interval-based advert (synchronous wrapper)"""
+        """
+        Send an interval-based advert (synchronous wrapper).
+        Submits the async task to the bot's main event loop using threadsafe approach.
+        """
         current_time = self.get_current_time()
         self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
         
-        # Create a new event loop for this thread if one doesn't exist
+        # --- FIX: Use threadsafe submission to the main event loop ---
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Assumes the running event loop is stored on the bot instance as self.bot.loop
+            bot_loop = self.bot.loop 
+        except AttributeError:
+            self.logger.error("Bot's event loop is not accessible at self.bot.loop. Cannot send advert safely.")
+            return
         
-        # Run the async function in the event loop
-        loop.run_until_complete(self._send_interval_advert_async())
+        coro = self._send_interval_advert_async()
+        
+        # Submit the async job to the main bot's event loop from the scheduler thread
+        future = asyncio.run_coroutine_threadsafe(coro, bot_loop)
+        try:
+            # Wait up to 60 seconds for the coroutine to complete
+            future.result(timeout=60)
+            self.logger.info("Interval-based flood advert submitted successfully to bot loop.")
+        except Exception as e:
+            self.logger.error(f"Error submitting interval-based advert via threadsafe submit: {e}")
     
     async def _send_interval_advert_async(self):
         """Send an interval-based advert (async implementation)"""
         try:
             # Use the same advert functionality as the manual advert command
+            # NOTE: Assumes self.bot.meshcore.commands is available and has send_advert
             await self.bot.meshcore.commands.send_advert(flood=True)
             self.logger.info("Interval-based flood advert sent successfully")
         except Exception as e:
