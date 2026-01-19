@@ -9,13 +9,11 @@ import threading
 import schedule
 import datetime
 import pytz
-import sqlite3
-import json
-import os
+import asyncio
 from typing import Dict, Tuple, Any
-from pathlib import Path
-from .utils import format_keyword_response_with_placeholders
 
+# Import necessary classes and functions from utils
+from .utils import format_keyword_response_with_placeholders
 
 class MessageScheduler:
     """Manages scheduled messages and timing"""
@@ -53,7 +51,6 @@ class MessageScheduler:
                         continue
                     
                     channel, message = message_info.split(':', 1)
-                    
                     # Convert HHMM to HH:MM for scheduler
                     hour = int(time_str[:2])
                     minute = int(time_str[2:])
@@ -102,100 +99,93 @@ class MessageScheduler:
         current_time = self.get_current_time()
         self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
         
-        import asyncio
-        
-        # Use the main event loop if available, otherwise create a new one
-        # This prevents deadlock when the main loop is already running
-        if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-            # Schedule coroutine in the running main event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._send_scheduled_message_async(channel, message),
-                self.bot.main_event_loop
-            )
-            # Wait for completion (with timeout to prevent indefinite blocking)
-            try:
-                future.result(timeout=60)  # 60 second timeout
-            except Exception as e:
-                self.logger.error(f"Error sending scheduled message: {e}")
-        else:
-            # Fallback: create new event loop if main loop not available
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Run the async function in the event loop
+        # If message is explicitly meant to be an internal bot command use prefix 'cmd:'
+        msg_strip = message.lstrip()
+        lower_prefix = msg_strip[:4].lower()
+        if lower_prefix == 'cmd:':
+            command_text = msg_strip[4:].strip()
+            if command_text:
+                # Run the internal command via command_manager using simplified approach
+                try:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self._invoke_internal_command_async(channel, command_text))
+                except Exception as e:
+                    self.logger.exception(f"Failed to run scheduled internal command '{command_text}': {e}")
+            else:
+                # No command after prefix — send informative message
+                try:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self._send_scheduled_message_async(channel, "No command specified after 'cmd:'."))
+                except Exception:
+                    self.logger.error("Failed to send error message for empty command")
+            return
+
+        # Regular (plain text) scheduled message -> send as-is
+        try:
+            loop = asyncio.new_event_loop()
             loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+        except Exception as e:
+            self.logger.exception(f"Failed to send scheduled message: {e}")
     
+    async def _invoke_internal_command_async(self, channel: str, command_text: str):
+        """
+        Invoke a bot command via the existing CommandManager API by constructing
+        a MeshMessage and letting CommandManager run its normal matching/execution flow.
+        """
+        cmdmgr = getattr(self.bot, 'command_manager', None)
+        if not cmdmgr:
+            self.logger.error("bot.command_manager is not available. Cannot run internal command.")
+            return
+
+        # Import here to avoid circular import issues at module level
+        from .models import MeshMessage
+
+        # Construct a MeshMessage that represents the scheduled invocation.
+        msg = MeshMessage(
+            content=command_text.strip(),
+            sender_id='scheduler',
+            channel=channel,
+            is_dm=False,   # set True if you intend to invoke DM-only commands
+        )
+
+        try:
+            matches = cmdmgr.check_keywords(msg)
+            if not matches:
+                # Try with an explicit '!' prefix (some commands expect '!' style)
+                msg_alt = MeshMessage(content='!' + msg.content, sender_id=msg.sender_id, channel=msg.channel, is_dm=msg.is_dm)
+                matches = cmdmgr.check_keywords(msg_alt)
+                if matches:
+                    msg = msg_alt
+
+            if not matches:
+                # No match found — inform channel that the scheduled command is unknown
+                await cmdmgr.send_channel_message(channel, f"Failed to run internal command '{command_text}': not found.")
+                self.logger.error(f"No matching command/plugin found for scheduled command: {command_text}")
+                return
+
+            # Execute the command via the CommandManager's normal execution path
+            await cmdmgr.execute_commands(msg)
+            self.logger.info(f"Scheduled internal command executed: {command_text}")
+
+        except Exception as e:
+            self.logger.exception(f"Error invoking internal command '{command_text}': {e}")
+            try:
+                await cmdmgr.send_channel_message(channel, f"Error running command '{command_text}': {e}")
+            except Exception:
+                self.logger.error("Failed to send error message to channel after invocation failure.")
+
     async def _send_scheduled_message_async(self, channel: str, message: str):
         """Send a scheduled message (async implementation)"""
-        # Check if message contains mesh info placeholders or command
-        if self._has_mesh_info_placeholders(message) or self._is_command(message):
-            try:
-                if self._is_command(message):
-                    output = await self.execute_command(message)
-                    message = f"Command output: {output}"
-                else:
-                    mesh_info = await self._get_mesh_info()
-                    # Use shared formatting function (message=None for scheduled messages)
-                    message = format_keyword_response_with_placeholders(
-                        message,
-                        message=None,  # No message object for scheduled messages
-                        bot=self.bot,
-                        mesh_info=mesh_info
-                    )
-                    self.logger.debug(f"Replaced mesh info placeholders in scheduled message")
-            except Exception as e:
-                self.logger.warning(f"Error fetching mesh info or executing command: {e}. Sending message as-is.")
-        
-        await self.bot.command_manager.send_channel_message(channel, message)
-    
-    def _has_mesh_info_placeholders(self, message: str) -> bool:
-        """Check if message contains mesh info placeholders"""
-        placeholders = [
-            '{total_contacts}', '{total_repeaters}', '{total_companions}', 
-            '{total_roomservers}', '{total_sensors}', '{recent_activity_24h}',
-            '{new_companions_7d}', '{new_repeaters_7d}', '{new_roomservers_7d}', '{new_sensors_7d}',
-            '{total_contacts_30d}', '{total_repeaters_30d}', '{total_companions_30d}',
-            '{total_roomservers_30d}', '{total_sensors_30d}',
-            # Legacy placeholders for backward compatibility
-            '{repeaters}', '{companions}'
-        ]
-        return any(placeholder in message for placeholder in placeholders)
-    
-    def _is_command(self, message: str) -> bool:
-        """Check if the message is a command"""
-        return message.startswith("cmd:")
-    
-    async def execute_command(self, command: str) -> str:
-        """Execute a command via the command API and return output"""
-        import asyncio
-        
-        # Parse the command
-        _, cmd = command.split(':', 1)
-        
-        self.logger.info(f"Executing command: {cmd}")
-        
         try:
-            # Simulate running the command (replace with actual command execution logic)
-            process = await asyncio.create_subprocess_shell(
-                cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            
-            if process.returncode != 0:
-                self.logger.error(f"Command failed with error: {stderr.decode()}")
-                return f"Error: {stderr.decode().strip()}"
-            
-            output = stdout.decode().strip()
-            self.logger.info(f"Command output: {output}")
-            return output
+            # Try command_manager first, fall back to bot.send_message if available
+            if hasattr(self.bot, 'command_manager') and self.bot.command_manager:
+                await self.bot.command_manager.send_channel_message(channel, message)
+            elif hasattr(self.bot, 'send_message') and callable(self.bot.send_message):
+                await self.bot.send_message(channel, message)
+            else:
+                self.logger.error("No available method to send scheduled message")
         except Exception as e:
-            self.logger.error(f"Failed to execute command: {e}")
-            return f"Error executing command: {str(e)}"
+            self.logger.exception(f"Error sending scheduled message to {channel}: {e}")
     
     def start(self):
         """Start the scheduler in a separate thread"""
@@ -206,16 +196,13 @@ class MessageScheduler:
         """Run the scheduler in a separate thread"""
         self.logger.info("Scheduler thread started")
         last_log_time = 0
-        last_feed_poll_time = 0
-        last_job_count = 0
-        last_job_log_time = 0
         
         while self.bot.connected:
             current_time = self.get_current_time()
             
             # Log current time every 5 minutes for debugging
             if time.time() - last_log_time > 300:  # 5 minutes
-                self.logger.info(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                self.logger.debug(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 last_log_time = time.time()
             
             # Check for pending scheduled messages (only log when count changes, max once per 30 seconds)
@@ -230,100 +217,6 @@ class MessageScheduler:
             
             # Check for interval-based advertising
             self.check_interval_advertising()
-            
-            # Poll feeds every minute (but feeds themselves control their check intervals)
-            if time.time() - last_feed_poll_time >= 60:  # Every 60 seconds
-                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and 
-                    hasattr(self.bot.feed_manager, 'enabled') and self.bot.feed_manager.enabled and
-                    hasattr(self.bot, 'connected') and self.bot.connected):
-                    # Run feed polling in async context
-                    import asyncio
-                    if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.bot.feed_manager.poll_all_feeds(),
-                            self.bot.main_event_loop
-                        )
-                        try:
-                            future.result(timeout=120)  # 2 minute timeout for feed polling
-                            self.logger.debug("Feed polling cycle completed")
-                        except Exception as e:
-                            self.logger.error(f"Error in feed polling cycle: {e}")
-                    else:
-                        # Fallback: create new event loop if main loop not available
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        try:
-                            loop.run_until_complete(self.bot.feed_manager.poll_all_feeds())
-                            self.logger.debug("Feed polling cycle completed")
-                        except Exception as e:
-                            self.logger.error(f"Error in feed polling cycle: {e}")
-                    last_feed_poll_time = time.time()
-            
-            # Channels are fetched once on launch only - no periodic refresh
-            # This prevents losing channels during incomplete updates
-            
-            # Process pending channel operations from web viewer (every 5 seconds)
-            if not hasattr(self, 'last_channel_ops_check_time'):
-                self.last_channel_ops_check_time = 0
-            
-            if time.time() - self.last_channel_ops_check_time >= 5:  # Every 5 seconds
-                if (hasattr(self.bot, 'channel_manager') and self.bot.channel_manager and 
-                    hasattr(self.bot, 'connected') and self.bot.connected):
-                    import asyncio
-                    if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
-                        future = asyncio.run_coroutine_threadsafe(
-                            self._process_channel_operations(),
-                            self.bot.main_event_loop
-                        )
-                        try:
-                            future.result(timeout=30)  # 30 second timeout
-                        except Exception as e:
-                            self.logger.error(f"Error processing channel operations: {e}")
-                    else:
-                        # Fallback: create new event loop if main loop not available
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        loop.run_until_complete(self._process_channel_operations())
-                    self.last_channel_ops_check_time = time.time()
-            
-            # Process feed message queue (every 2 seconds)
-            if not hasattr(self, 'last_message_queue_check_time'):
-                self.last_message_queue_check_time = 0
-            
-            if time.time() - self.last_message_queue_check_time >= 2:  # Every 2 seconds
-                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and 
-                    hasattr(self.bot, 'connected') and self.bot.connected):
-                    import asyncio
-                    if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.bot.feed_manager.process_message_queue(),
-                            self.bot.main_event_loop
-                        )
-                        try:
-                            future.result(timeout=30)  # 30 second timeout
-                        except Exception as e:
-                            self.logger.error(f"Error processing message queue: {e}")
-                    else:
-                        # Fallback: create new event loop if main loop not available
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        loop.run_until_complete(self.bot.feed_manager.process_message_queue())
-                    self.last_message_queue_check_time = time.time()
             
             schedule.run_pending()
             time.sleep(1)
@@ -361,31 +254,15 @@ class MessageScheduler:
         current_time = self.get_current_time()
         self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
         
-        import asyncio
+        # Create a new event loop for this thread if one doesn't exist
+        try:
+            loop = asyncio.new_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         
-        # Use the main event loop if available, otherwise create a new one
-        # This prevents deadlock when the main loop is already running
-        if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-            # Schedule coroutine in the running main event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._send_interval_advert_async(),
-                self.bot.main_event_loop
-            )
-            # Wait for completion (with timeout to prevent indefinite blocking)
-            try:
-                future.result(timeout=60)  # 60 second timeout
-            except Exception as e:
-                self.logger.error(f"Error sending interval advert: {e}")
-        else:
-            # Fallback: create new event loop if main loop not available
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Run the async function in the event loop
-            loop.run_until_complete(self._send_interval_advert_async())
+        # Run the async function in the event loop
+        loop.run_until_complete(self._send_interval_advert_async())
     
     async def _send_interval_advert_async(self):
         """Send an interval-based advert (async implementation)"""
@@ -395,119 +272,10 @@ class MessageScheduler:
             self.logger.info("Interval-based flood advert sent successfully")
         except Exception as e:
             self.logger.error(f"Error sending interval-based advert: {e}")
-    
-    async def _process_channel_operations(self):
-        """Process pending channel operations from the web viewer"""
-        try:
-            db_path = str(self.bot.db_manager.db_path)  # Ensure string, not Path object
-            
-            # Get pending operations
-            with sqlite3.connect(db_path, timeout=30.0) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    SELECT id, operation_type, channel_idx, channel_name, channel_key_hex
-                    FROM channel_operations
-                    WHERE status = 'pending'
-                    ORDER BY created_at ASC
-                    LIMIT 10
-                ''')
-                
-                operations = cursor.fetchall()
-            
-            if not operations:
-                return
-            
-            self.logger.info(f"Processing {len(operations)} pending channel operation(s)")
-            
-            for op in operations:
-                op_id = op['id']
-                op_type = op['operation_type']
-                channel_idx = op['channel_idx']
-                channel_name = op['channel_name']
-                channel_key_hex = op['channel_key_hex']
-                
-                try:
-                    success = False
-                    error_msg = None
-                    
-                    if op_type == 'add':
-                        # Add channel
-                        if channel_key_hex:
-                            # Custom channel with key
-                            channel_secret = bytes.fromhex(channel_key_hex)
-                            success = await self.bot.channel_manager.add_channel(
-                                channel_idx, channel_name, channel_secret=channel_secret
-                            )
-                        else:
-                            # Hashtag channel (firmware generates key)
-                            success = await self.bot.channel_manager.add_channel(
-                                channel_idx, channel_name
-                            )
-                        
-                        if success:
-                            self.logger.info(f"Successfully processed channel add operation: {channel_name} at index {channel_idx}")
-                        else:
-                            error_msg = "Failed to add channel"
-                    
-                    elif op_type == 'remove':
-                        # Remove channel
-                        success = await self.bot.channel_manager.remove_channel(channel_idx)
-                        
-                        if success:
-                            self.logger.info(f"Successfully processed channel remove operation: index {channel_idx}")
-                        else:
-                            error_msg = "Failed to remove channel"
-                    
-                    # Update operation status
-                    with sqlite3.connect(db_path, timeout=30.0) as conn:
-                        cursor = conn.cursor()
-                        if success:
-                            cursor.execute('''
-                                UPDATE channel_operations
-                                SET status = 'completed',
-                                    processed_at = CURRENT_TIMESTAMP,
-                                    result_data = ?
-                                WHERE id = ?
-                            ''', (json.dumps({'success': True}), op_id))
-                        else:
-                            cursor.execute('''
-                                UPDATE channel_operations
-                                SET status = 'failed',
-                                    processed_at = CURRENT_TIMESTAMP,
-                                    error_message = ?
-                                WHERE id = ?
-                            ''', (error_msg or 'Unknown error', op_id))
-                        conn.commit()
-                
-                except Exception as e:
-                    self.logger.error(f"Error processing channel operation {op_id}: {e}")
-                    # Mark as failed
-                    try:
-                        with sqlite3.connect(db_path, timeout=30.0) as conn:
-                            cursor = conn.cursor()
-                            cursor.execute('''
-                                UPDATE channel_operations
-                                SET status = 'failed',
-                                    processed_at = CURRENT_TIMESTAMP,
-                                    error_message = ?
-                                WHERE id = ?
-                            ''', (str(e), op_id))
-                            conn.commit()
-                    except Exception as update_error:
-                        self.logger.error(f"Error updating operation status: {update_error}")
-        
-        except Exception as e:
-            db_path = getattr(self.bot.db_manager, 'db_path', 'unknown')
-            db_path_str = str(db_path) if db_path != 'unknown' else 'unknown'
-            self.logger.error(f"Error in _process_channel_operations: {e}")
-            if db_path_str != 'unknown':
-                path_obj = Path(db_path_str)
-                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {os.access(db_path_str, os.R_OK) if path_obj.exists() else False}, writable: {os.access(db_path_str, os.W_OK) if path_obj.exists() else False})")
-                # Check parent directory permissions
-                if path_obj.exists():
-                    parent = path_obj.parent
-                    self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {os.access(str(parent), os.W_OK) if parent.exists() else False})")
-            else:
-                self.logger.error(f"Database path: {db_path_str}")
+
+    def list_scheduled_messages(self):
+        """Return a list of currently scheduled messages for debugging"""
+        return [
+            f"{time_str} -> {channel}: {message}"
+            for time_str, (channel, message) in self.scheduled_messages.items()
+        ]
