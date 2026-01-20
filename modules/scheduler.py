@@ -195,25 +195,28 @@ class MessageScheduler:
     def run_scheduler(self):
         """Run the scheduler in a separate thread"""
         self.logger.info("Scheduler thread started")
-        last_log_time = 0
+        
+        # Initialize last_job_count and last_job_log_time
+        self.last_job_count = 0
+        self.last_job_log_time = 0
         
         while self.bot.connected:
             current_time = self.get_current_time()
             
             # Log current time every 5 minutes for debugging
-            if time.time() - last_log_time > 300:  # 5 minutes
+            if time.time() - self.last_log_time > 300:  # 5 minutes
                 self.logger.debug(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                last_log_time = time.time()
+                self.last_log_time = time.time()
             
             # Check for pending scheduled messages (only log when count changes, max once per 30 seconds)
             pending_jobs = schedule.get_jobs()
             current_job_count = len(pending_jobs) if pending_jobs else 0
             current_time_sec = time.time()
-            if current_job_count != last_job_count and (current_time_sec - last_job_log_time) >= 30:
+            if current_job_count != self.last_job_count and (current_time_sec - self.last_job_log_time) >= 30:
                 if current_job_count > 0:
                     self.logger.debug(f"Found {current_job_count} scheduled jobs")
-                last_job_count = current_job_count
-                last_job_log_time = current_time_sec
+                self.last_job_count = current_job_count
+                self.last_job_log_time = current_time_sec
             
             # Check for interval-based advertising
             self.check_interval_advertising()
