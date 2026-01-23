@@ -12,6 +12,7 @@ import pytz
 import sqlite3
 import json
 import os
+import inspect
 from typing import Dict, Tuple, Any
 from pathlib import Path
 from .utils import format_keyword_response_with_placeholders
@@ -52,6 +53,10 @@ class MessageScheduler:
                         self.logger.warning(f"Invalid time format '{time_str}' for scheduled message: {message_info}")
                         continue
                     
+                    # Expect "<channel>:<message>" - split on first ':' so message may contain colons
+                    if ':' not in message_info:
+                        self.logger.warning(f"Invalid scheduled message format (missing channel separator): {message_info}")
+                        continue
                     channel, message = message_info.split(':', 1)
                     # Convert HHMM to HH:MM for scheduler
                     hour = int(time_str[:2])
@@ -284,8 +289,17 @@ class MessageScheduler:
         return any(placeholder in message for placeholder in placeholders)
     
     async def _send_scheduled_message_async(self, channel: str, message: str):
-        """Send a scheduled message (async implementation)"""
-        # Check if message contains mesh info placeholders
+        """Send a scheduled message (async implementation)
+
+        Extended behavior:
+        - If the (possibly placeholder-expanded) message begins with "cmd:" (case-insensitive),
+          treat the rest as a command to be executed rather than a plain channel message.
+        - The scheduler will attempt to call a command execution method on several likely
+          targets (bot.command_manager, bot.meshcore.commands). It will try common method
+          names and multiple call signatures to maximize compatibility with existing code.
+        - If no executor is found or command execution fails, the message will be sent as a normal channel message.
+        """
+        # First, replace any mesh info placeholders if present
         if self._has_mesh_info_placeholders(message):
             try:
                 mesh_info = await self._get_mesh_info()
@@ -303,7 +317,103 @@ class MessageScheduler:
             except Exception as e:
                 self.logger.warning(f"Error fetching mesh info for scheduled message: {e}. Sending message as-is.")
         
-        await self.bot.command_manager.send_channel_message(channel, message)
+        # Check for command prefix after placeholder replacement
+        stripped = message.strip()
+        lower = stripped.lower()
+        if lower.startswith('cmd:'):
+            command_text = stripped.split(':', 1)[1].strip()
+            if not command_text:
+                self.logger.warning("Scheduled command message contained 'cmd:' but no command text. Skipping.")
+                return
+            
+            self.logger.info(f"Executing scheduled command: {command_text}")
+            
+            # Candidate targets to find a command execution entry point
+            candidate_targets = []
+            if hasattr(self.bot, 'command_manager') and self.bot.command_manager:
+                candidate_targets.append(self.bot.command_manager)
+            if hasattr(self.bot, 'meshcore') and hasattr(self.bot.meshcore, 'commands') and self.bot.meshcore.commands:
+                candidate_targets.append(self.bot.meshcore.commands)
+            # Also allow top-level bot object to provide command entrypoints
+            candidate_targets.append(self.bot)
+            
+            # Candidate method names in order of likelihood
+            candidate_method_names = [
+                'execute_command', 'process_command', 'handle_command', 'run_command',
+                'execute', 'process', 'handle', 'dispatch_command', 'run', 'handle_message',
+                'process_message', 'handle_incoming_command'
+            ]
+            
+            executed = False
+            last_error = None
+            
+            for target in candidate_targets:
+                for method_name in candidate_method_names:
+                    if not hasattr(target, method_name):
+                        continue
+                    method = getattr(target, method_name)
+                    try:
+                        # Prepare call attempts with different signatures
+                        call_attempts = [
+                            (method, (command_text, channel)),  # command_text, channel
+                            (method, (command_text,)),          # just command text
+                            (method, (channel, command_text)),  # channel, command_text
+                            (method, (command_text, True)),     # maybe flood flag or similar
+                        ]
+                        for fn, args in call_attempts:
+                            try:
+                                result = fn(*args)
+                                # If the result is awaitable, await it
+                                if inspect.isawaitable(result):
+                                    await result
+                                executed = True
+                                self.logger.info(f"Scheduled command executed by {target.__class__.__name__}.{method_name} with args {args}")
+                                break
+                            except TypeError:
+                                # Signature mismatch; try next arg pattern
+                                continue
+                        if executed:
+                            break
+                    except Exception as e:
+                        last_error = e
+                        self.logger.error(f"Error executing scheduled command with {target}.{method_name}: {e}")
+                        # Try next candidate method
+                if executed:
+                    break
+            
+            if not executed:
+                # As a last resort, try to send the command text into the regular incoming/message handler
+                try:
+                    if hasattr(self.bot, 'message_handler') and hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+                        # If there's a message handler coroutine that accepts a channel and text, attempt to use it
+                        mh = getattr(self.bot, 'message_handler', None)
+                        if mh:
+                            try:
+                                res = mh(channel, command_text)
+                                if inspect.isawaitable(res):
+                                    await res
+                                    executed = True
+                            except Exception:
+                                pass
+                    # If still not executed, log and fallback to sending as message
+                except Exception:
+                    pass
+            
+            if not executed:
+                self.logger.warning(f"Could not find a command executor for scheduled command. Falling back to sending the text as a message. Last error: {last_error}")
+                # Fallback: send the command text to the channel as a normal message
+                try:
+                    await self.bot.command_manager.send_channel_message(channel, command_text)
+                except Exception as e:
+                    self.logger.error(f"Failed to send fallback scheduled command text as message: {e}")
+            
+            return
+        
+        # Not a command, send as a normal channel message
+        try:
+            await self.bot.command_manager.send_channel_message(channel, message)
+        except Exception as e:
+            self.logger.error(f"Error sending scheduled channel message: {e}")
     
     def start(self):
         """Start the scheduler in a separate thread"""
@@ -612,10 +722,20 @@ class MessageScheduler:
             self.logger.error(f"Error in _process_channel_operations: {e}")
             if db_path_str != 'unknown':
                 path_obj = Path(db_path_str)
-                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {os.access(db_path_str, os.R_OK) if path_obj.exists() else False}, writable: {os.access(db_path_str, os.W_OK) if path_obj.exists() else False})")
+                try:
+                    readable = os.access(str(path_obj), os.R_OK) if path_obj.exists() else False
+                    writable = os.access(str(path_obj), os.W_OK) if path_obj.exists() else False
+                except Exception:
+                    readable = False
+                    writable = False
+                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {readable}, writable: {writable})")
                 # Check parent directory permissions
                 if path_obj.exists():
                     parent = path_obj.parent
-                    self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {os.access(str(parent), os.W_OK) if parent.exists() else False})")
+                    try:
+                        parent_writable = os.access(str(parent), os.W_OK) if parent.exists() else False
+                    except Exception:
+                        parent_writable = False
+                    self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {parent_writable})")
             else:
                 self.logger.error(f"Database path: {db_path_str}")
