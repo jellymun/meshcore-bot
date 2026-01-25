@@ -12,10 +12,11 @@ import pytz
 import sqlite3
 import json
 import os
-import inspect
+import asyncio
 from typing import Dict, Tuple, Any
 from pathlib import Path
 from .utils import format_keyword_response_with_placeholders
+from .models import MeshMessage
 
 
 class MessageScheduler:
@@ -106,10 +107,7 @@ class MessageScheduler:
         current_time = self.get_current_time()
         self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
         
-        import asyncio
-        
         # Use the main event loop if available, otherwise create a new one
-        # This prevents deadlock when the main loop is already running
         if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
             # Schedule coroutine in the running main event loop
             future = asyncio.run_coroutine_threadsafe(
@@ -294,10 +292,8 @@ class MessageScheduler:
         Extended behavior:
         - If the (possibly placeholder-expanded) message begins with "cmd:" (case-insensitive),
           treat the rest as a command to be executed rather than a plain channel message.
-        - The scheduler will attempt to call a command execution method on several likely
-          targets (bot.command_manager, bot.meshcore.commands). It will try common method
-          names and multiple call signatures to maximize compatibility with existing code.
-        - If no executor is found or command execution fails, the message will be sent as a normal channel message.
+        - The scheduler will construct a MeshMessage and hand it to the CommandManager's
+          execute_commands() path so plugin commands run as if they were incoming messages.
         """
         # First, replace any mesh info placeholders if present
         if self._has_mesh_info_placeholders(message):
@@ -328,85 +324,55 @@ class MessageScheduler:
             
             self.logger.info(f"Executing scheduled command: {command_text}")
             
-            # Candidate targets to find a command execution entry point
-            candidate_targets = []
-            if hasattr(self.bot, 'command_manager') and self.bot.command_manager:
-                candidate_targets.append(self.bot.command_manager)
-            if hasattr(self.bot, 'meshcore') and hasattr(self.bot.meshcore, 'commands') and self.bot.meshcore.commands:
-                candidate_targets.append(self.bot.meshcore.commands)
-            # Also allow top-level bot object to provide command entrypoints
-            candidate_targets.append(self.bot)
-            
-            # Candidate method names in order of likelihood
-            candidate_method_names = [
-                'execute_command', 'process_command', 'handle_command', 'run_command',
-                'execute', 'process', 'handle', 'dispatch_command', 'run', 'handle_message',
-                'process_message', 'handle_incoming_command'
-            ]
-            
-            executed = False
-            last_error = None
-            
-            for target in candidate_targets:
-                for method_name in candidate_method_names:
-                    if not hasattr(target, method_name):
-                        continue
-                    method = getattr(target, method_name)
-                    try:
-                        # Prepare call attempts with different signatures
-                        call_attempts = [
-                            (method, (command_text, channel)),  # command_text, channel
-                            (method, (command_text,)),          # just command text
-                            (method, (channel, command_text)),  # channel, command_text
-                            (method, (command_text, True)),     # maybe flood flag or similar
-                        ]
-                        for fn, args in call_attempts:
+            # Construct a MeshMessage and hand off to CommandManager.execute_commands
+            try:
+                # Preserve channel name if provided and non-empty, else None
+                channel_val = channel.strip() if channel and channel.strip() else None
+                
+                # Create a scheduled MeshMessage.
+                # Use is_dm=True so DM-only commands can run; commands can still inspect channel if needed.
+                scheduled_msg = MeshMessage(
+                    content=command_text,
+                    sender_id='scheduler',
+                    sender_pubkey=None,
+                    channel=channel_val,
+                    hops=None,
+                    path=None,
+                    is_dm=True,
+                    timestamp=int(time.time())
+                )
+                
+                if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'execute_commands'):
+                    await self.bot.command_manager.execute_commands(scheduled_msg)
+                    self.logger.info("Scheduled command dispatched to CommandManager.execute_commands")
+                else:
+                    # Fallback: attempt a best-effort execution for a small set of known operations
+                    if hasattr(self.bot, 'meshcore') and hasattr(self.bot.meshcore, 'commands'):
+                        cmd_lower = command_text.split()[0].lower()
+                        if cmd_lower in ('advert', 'send_advert'):
                             try:
-                                result = fn(*args)
-                                # If the result is awaitable, await it
-                                if inspect.isawaitable(result):
-                                    await result
-                                executed = True
-                                self.logger.info(f"Scheduled command executed by {target.__class__.__name__}.{method_name} with args {args}")
-                                break
-                            except TypeError:
-                                # Signature mismatch; try next arg pattern
-                                continue
-                        if executed:
-                            break
-                    except Exception as e:
-                        last_error = e
-                        self.logger.error(f"Error executing scheduled command with {target}.{method_name}: {e}")
-                        # Try next candidate method
-                if executed:
-                    break
-            
-            if not executed:
-                # As a last resort, try to send the command text into the regular incoming/message handler
-                try:
-                    if hasattr(self.bot, 'message_handler') and hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # If there's a message handler coroutine that accepts a channel and text, attempt to use it
-                        mh = getattr(self.bot, 'message_handler', None)
-                        if mh:
-                            try:
-                                res = mh(channel, command_text)
-                                if inspect.isawaitable(res):
-                                    await res
-                                    executed = True
-                            except Exception:
-                                pass
-                    # If still not executed, log and fallback to sending as message
-                except Exception:
-                    pass
-            
-            if not executed:
-                self.logger.warning(f"Could not find a command executor for scheduled command. Falling back to sending the text as a message. Last error: {last_error}")
-                # Fallback: send the command text to the channel as a normal message
-                try:
-                    await self.bot.command_manager.send_channel_message(channel, command_text)
-                except Exception as e:
-                    self.logger.error(f"Failed to send fallback scheduled command text as message: {e}")
-            
+                                await self.bot.meshcore.commands.send_advert(flood=True)
+                                self.logger.info("Scheduled advert executed via meshcore.commands.send_advert")
+                            except Exception as e:
+                                self.logger.error(f"Fallback advert execution failed: {e}")
+                        else:
+                            # Unable to execute as command: send as channel message fallback
+                            if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'send_channel_message'):
+                                target_channel = channel_val or ''
+                                await self.bot.command_manager.send_channel_message(target_channel, command_text)
+                                self.logger.warning("No execute_commands available; sent command text as fallback message")
+                            else:
+                                self.logger.error("No command execution or send path available for scheduled command")
+                    else:
+                        # Last resort: send as plain channel message
+                        if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'send_channel_message'):
+                            target_channel = channel_val or ''
+                            await self.bot.command_manager.send_channel_message(target_channel, command_text)
+                            self.logger.warning("No command execution path found; sent command text as channel message")
+                        else:
+                            self.logger.error("No command execution or send path available for scheduled command")
+            except Exception as e:
+                self.logger.error(f"Error executing scheduled command '{command_text}': {e}")
             return
         
         # Not a command, send as a normal channel message
@@ -455,9 +421,7 @@ class MessageScheduler:
                     hasattr(self.bot.feed_manager, 'enabled') and self.bot.feed_manager.enabled and
                     hasattr(self.bot, 'connected') and self.bot.connected):
                     # Run feed polling in async context
-                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self.bot.feed_manager.poll_all_feeds(),
                             self.bot.main_event_loop
@@ -492,9 +456,7 @@ class MessageScheduler:
             if time.time() - self.last_channel_ops_check_time >= 5:  # Every 5 seconds
                 if (hasattr(self.bot, 'channel_manager') and self.bot.channel_manager and 
                     hasattr(self.bot, 'connected') and self.bot.connected):
-                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self._process_channel_operations(),
                             self.bot.main_event_loop
@@ -504,7 +466,6 @@ class MessageScheduler:
                         except Exception as e:
                             self.logger.error(f"Error processing channel operations: {e}")
                     else:
-                        # Fallback: create new event loop if main loop not available
                         try:
                             loop = asyncio.get_event_loop()
                         except RuntimeError:
@@ -521,9 +482,7 @@ class MessageScheduler:
             if time.time() - self.last_message_queue_check_time >= 2:  # Every 2 seconds
                 if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and 
                     hasattr(self.bot, 'connected') and self.bot.connected):
-                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self.bot.feed_manager.process_message_queue(),
                             self.bot.main_event_loop
@@ -533,7 +492,6 @@ class MessageScheduler:
                         except Exception as e:
                             self.logger.error(f"Error processing message queue: {e}")
                     else:
-                        # Fallback: create new event loop if main loop not available
                         try:
                             loop = asyncio.get_event_loop()
                         except RuntimeError:
@@ -579,30 +537,23 @@ class MessageScheduler:
         current_time = self.get_current_time()
         self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
         
-        import asyncio
-        
         # Use the main event loop if available, otherwise create a new one
-        # This prevents deadlock when the main loop is already running
         if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
-            # Schedule coroutine in the running main event loop
             future = asyncio.run_coroutine_threadsafe(
                 self._send_interval_advert_async(),
                 self.bot.main_event_loop
             )
-            # Wait for completion (with timeout to prevent indefinite blocking)
             try:
                 future.result(timeout=60)  # 60 second timeout
             except Exception as e:
                 self.logger.error(f"Error sending interval advert: {e}")
         else:
-            # Fallback: create new event loop if main loop not available
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Run the async function in the event loop
             loop.run_until_complete(self._send_interval_advert_async())
     
     async def _send_interval_advert_async(self):
