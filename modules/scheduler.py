@@ -12,26 +12,24 @@ import pytz
 import sqlite3
 import json
 import os
-import asyncio
 from typing import Dict, Tuple, Any
 from pathlib import Path
 from .utils import format_keyword_response_with_placeholders
-from .models import MeshMessage
 
 
 class MessageScheduler:
     """Manages scheduled messages and timing"""
-    
+
     def __init__(self, bot):
         self.bot = bot
         self.logger = bot.logger
         self.scheduled_messages = {}
         self.scheduler_thread = None
-    
+
     def get_current_time(self):
         """Get current time in configured timezone"""
         timezone_str = self.bot.config.get('Bot', 'timezone', fallback='')
-        
+
         if timezone_str:
             try:
                 tz = pytz.timezone(timezone_str)
@@ -41,7 +39,7 @@ class MessageScheduler:
                 return datetime.datetime.now()
         else:
             return datetime.datetime.now()
-    
+
     def setup_scheduled_messages(self):
         """Setup scheduled messages from config"""
         if self.bot.config.has_section('Scheduled_Messages'):
@@ -53,30 +51,51 @@ class MessageScheduler:
                     if not self._is_valid_time_format(time_str):
                         self.logger.warning(f"Invalid time format '{time_str}' for scheduled message: {message_info}")
                         continue
-                    
-                    # Expect "<channel>:<message>" - split on first ':' so message may contain colons
-                    if ':' not in message_info:
-                        self.logger.warning(f"Invalid scheduled message format (missing channel separator): {message_info}")
-                        continue
-                    channel, message = message_info.split(':', 1)
-                    # Convert HHMM to HH:MM for scheduler
-                    hour = int(time_str[:2])
-                    minute = int(time_str[2:])
-                    schedule_time = f"{hour:02d}:{minute:02d}"
-                    
-                    schedule.every().day.at(schedule_time).do(
-                        self.send_scheduled_message, channel.strip(), message.strip()
-                    )
-                    self.scheduled_messages[time_str] = (channel.strip(), message.strip())
-                    self.logger.info(f"Scheduled message: {schedule_time} -> {channel}: {message}")
+
+                    # Check if this is a command message (cmd: prefix)
+                    if message_info.startswith('cmd:'):
+                        # Handle command messages differently
+                        # Extract channel and command part
+                        cmd_part = message_info[4:].strip()  # Remove 'cmd:' prefix
+                        channel = 'Pogo'  # Default channel
+
+                        # Parse channel if specified in format like "channel:cmd:command"
+                        if ':' in message_info:
+                            parts = message_info.split(':', 2)
+                            if len(parts) >= 3:
+                                channel = parts[0]
+                                cmd_part = parts[2]
+
+                        self.logger.info(f"Scheduled command message for {channel}: '{cmd_part}'")
+                        # Schedule the command execution
+                        hour = int(time_str[:2])
+                        minute = int(time_str[2:])
+                        schedule_time = f"{hour:02d}:{minute:02d}"
+                        schedule.every().day.at(schedule_time).do(
+                            self.execute_scheduled_command, channel.strip(), cmd_part
+                        )
+                        self.scheduled_messages[time_str] = (channel.strip(), message_info.strip())
+                    else:
+                        # Handle regular messages (existing behavior)
+                        channel, message = message_info.split(':', 1)
+                        # Convert HHMM to HH:MM for scheduler
+                        hour = int(time_str[:2])
+                        minute = int(time_str[2:])
+                        schedule_time = f"{hour:02d}:{minute:02d}"
+
+                        schedule.every().day.at(schedule_time).do(
+                            self.send_scheduled_message, channel.strip(), message.strip()
+                        )
+                        self.scheduled_messages[time_str] = (channel.strip(), message.strip())
+                        self.logger.info(f"Scheduled message: {schedule_time} -> {channel}: {message}")
                 except ValueError:
                     self.logger.warning(f"Invalid scheduled message format: {message_info}")
                 except Exception as e:
                     self.logger.warning(f"Error setting up scheduled message '{time_str}': {e}")
-        
+
         # Setup interval-based advertising
         self.setup_interval_advertising()
-    
+
     def setup_interval_advertising(self):
         """Setup interval-based advertising from config"""
         try:
@@ -90,7 +109,7 @@ class MessageScheduler:
                 self.logger.info("Interval-based advertising disabled (advert_interval_hours = 0)")
         except Exception as e:
             self.logger.warning(f"Error setting up interval advertising: {e}")
-    
+
     def _is_valid_time_format(self, time_str: str) -> bool:
         """Validate time format (HHMM)"""
         try:
@@ -101,13 +120,16 @@ class MessageScheduler:
             return 0 <= hour <= 23 and 0 <= minute <= 59
         except ValueError:
             return False
-    
+
     def send_scheduled_message(self, channel: str, message: str):
         """Send a scheduled message (synchronous wrapper for schedule library)"""
         current_time = self.get_current_time()
         self.logger.info(f"📅 Sending scheduled message at {current_time.strftime('%H:%M:%S')} to {channel}: {message}")
-        
+
+        import asyncio
+
         # Use the main event loop if available, otherwise create a new one
+        # This prevents deadlock when the main loop is already running
         if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
             # Schedule coroutine in the running main event loop
             future = asyncio.run_coroutine_threadsafe(
@@ -126,10 +148,35 @@ class MessageScheduler:
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-            
+
             # Run the async function in the event loop
             loop.run_until_complete(self._send_scheduled_message_async(channel, message))
-    
+
+    async def execute_scheduled_command(self, channel: str, command: str):
+        """Execute a scheduled command as if sent by a remote user"""
+        self.logger.info(f"Executing scheduled command: '{command}' in channel '{channel}'")
+
+        # Prepare a fake message structure that the command manager can handle
+        # This simulates a remote user sending a command
+        try:
+            # Create a message structure similar to what the bot receives from mesh
+            # This will be processed by the command manager
+            fake_message = {
+                'channel': channel,
+                'sender': 'scheduled',  # Indicate this is a scheduled command
+                'message': command,
+                'timestamp': time.time(),
+                'is_dm': False,
+                'sender_name': 'Scheduled Command',
+                'sender_id': 'scheduled_command'
+            }
+
+            # Execute the command using the command manager (similar to how remote users send commands)
+            await self.bot.command_manager.handle_command_message(fake_message)
+
+        except Exception as e:
+            self.logger.error(f"Error executing scheduled command '{command}': {e}")
+
     async def _get_mesh_info(self) -> Dict[str, Any]:
         """Get mesh network information for scheduled messages"""
         info = {
@@ -149,7 +196,7 @@ class MessageScheduler:
             'total_roomservers_30d': 0,
             'total_sensors_30d': 0
         }
-        
+
         try:
             # Get contact statistics from repeater manager if available
             if hasattr(self.bot, 'repeater_manager'):
@@ -165,11 +212,11 @@ class MessageScheduler:
                         info['recent_activity_24h'] = stats.get('recent_activity', 0)
                 except Exception as e:
                     self.logger.debug(f"Error getting stats from repeater_manager: {e}")
-            
+
             # Fallback to device contacts if repeater manager stats not available
             if info['total_contacts'] == 0 and hasattr(self.bot, 'meshcore') and hasattr(self.bot.meshcore, 'contacts'):
                 info['total_contacts'] = len(self.bot.meshcore.contacts)
-                
+
                 # Count repeaters and companions
                 if hasattr(self.bot, 'repeater_manager'):
                     for contact_data in self.bot.meshcore.contacts.values():
@@ -177,7 +224,7 @@ class MessageScheduler:
                             info['total_repeaters'] += 1
                         else:
                             info['total_companions'] += 1
-            
+
             # Get recent activity from message_stats if available
             if info['recent_activity_24h'] == 0:
                 try:
@@ -185,7 +232,7 @@ class MessageScheduler:
                         cursor = conn.cursor()
                         # Check if message_stats table exists
                         cursor.execute('''
-                            SELECT name FROM sqlite_master 
+                            SELECT name FROM sqlite_master
                             WHERE type='table' AND name='message_stats'
                         ''')
                         if cursor.fetchone():
@@ -200,7 +247,7 @@ class MessageScheduler:
                                 info['recent_activity_24h'] = result[0]
                 except Exception:
                     pass
-            
+
             # Calculate new devices in last 7 days (matching web viewer logic)
             # Query devices first heard in the last 7 days, grouped by role
             # Also calculate devices active in last 30 days (last_heard)
@@ -209,7 +256,7 @@ class MessageScheduler:
                     cursor = conn.cursor()
                     # Check if complete_contact_tracking table exists
                     cursor.execute('''
-                        SELECT name FROM sqlite_master 
+                        SELECT name FROM sqlite_master
                         WHERE type='table' AND name='complete_contact_tracking'
                     ''')
                     if cursor.fetchone():
@@ -225,7 +272,7 @@ class MessageScheduler:
                         for row in cursor.fetchall():
                             role = (row[0] or '').lower()
                             count = row[1] or 0
-                            
+
                             if role == 'companion':
                                 info['new_companions_7d'] = count
                             elif role == 'repeater':
@@ -234,7 +281,7 @@ class MessageScheduler:
                                 info['new_roomservers_7d'] = count
                             elif role == 'sensor':
                                 info['new_sensors_7d'] = count
-                        
+
                         # Get total contacts active in last 30 days (last_heard)
                         cursor.execute('''
                             SELECT COUNT(DISTINCT public_key) as count
@@ -244,7 +291,7 @@ class MessageScheduler:
                         result = cursor.fetchone()
                         if result:
                             info['total_contacts_30d'] = result[0] or 0
-                        
+
                         # Get devices active in last 30 days by role (last_heard)
                         cursor.execute('''
                             SELECT role, COUNT(DISTINCT public_key) as count
@@ -256,7 +303,7 @@ class MessageScheduler:
                         for row in cursor.fetchall():
                             role = (row[0] or '').lower()
                             count = row[1] or 0
-                            
+
                             if role == 'companion':
                                 info['total_companions_30d'] = count
                             elif role == 'repeater':
@@ -267,16 +314,16 @@ class MessageScheduler:
                                 info['total_sensors_30d'] = count
             except Exception as e:
                 self.logger.debug(f"Error getting new device counts or 30-day activity: {e}")
-                    
+
         except Exception as e:
             self.logger.debug(f"Error getting mesh info: {e}")
-        
+
         return info
-    
+
     def _has_mesh_info_placeholders(self, message: str) -> bool:
         """Check if message contains mesh info placeholders"""
         placeholders = [
-            '{total_contacts}', '{total_repeaters}', '{total_companions}', 
+            '{total_contacts}', '{total_repeaters}', '{total_companions}',
             '{total_roomservers}', '{total_sensors}', '{recent_activity_24h}',
             '{new_companions_7d}', '{new_repeaters_7d}', '{new_roomservers_7d}', '{new_sensors_7d}',
             '{total_contacts_30d}', '{total_repeaters_30d}', '{total_companions_30d}',
@@ -285,17 +332,10 @@ class MessageScheduler:
             '{repeaters}', '{companions}'
         ]
         return any(placeholder in message for placeholder in placeholders)
-    
-    async def _send_scheduled_message_async(self, channel: str, message: str):
-        """Send a scheduled message (async implementation)
 
-        Extended behavior:
-        - If the (possibly placeholder-expanded) message begins with "cmd:" (case-insensitive),
-          treat the rest as a command to be executed rather than a plain channel message.
-        - The scheduler will construct a MeshMessage and hand it to the CommandManager's
-          execute_commands() path so plugin commands run as if they were incoming messages.
-        """
-        # First, replace any mesh info placeholders if present
+    async def _send_scheduled_message_async(self, channel: str, message: str):
+        """Send a scheduled message (async implementation)"""
+        # Check if message contains mesh info placeholders
         if self._has_mesh_info_placeholders(message):
             try:
                 mesh_info = await self._get_mesh_info()
@@ -312,80 +352,14 @@ class MessageScheduler:
                     self.logger.warning(f"Error replacing placeholders in scheduled message: {e}. Sending message as-is.")
             except Exception as e:
                 self.logger.warning(f"Error fetching mesh info for scheduled message: {e}. Sending message as-is.")
-        
-        # Check for command prefix after placeholder replacement
-        stripped = message.strip()
-        lower = stripped.lower()
-        if lower.startswith('cmd:'):
-            command_text = stripped.split(':', 1)[1].strip()
-            if not command_text:
-                self.logger.warning("Scheduled command message contained 'cmd:' but no command text. Skipping.")
-                return
-            
-            self.logger.info(f"Executing scheduled command: {command_text}")
-            
-            # Construct a MeshMessage and hand off to CommandManager.execute_commands
-            try:
-                # Preserve channel name if provided and non-empty, else None
-                channel_val = channel.strip() if channel and channel.strip() else None
-                
-                # Create a scheduled MeshMessage.
-                # Use is_dm=True so DM-only commands can run; commands can still inspect channel if needed.
-                scheduled_msg = MeshMessage(
-                    content=command_text,
-                    sender_id='scheduler',
-                    sender_pubkey=None,
-                    channel=channel_val,
-                    hops=None,
-                    path=None,
-                    is_dm=True,
-                    timestamp=int(time.time())
-                )
-                
-                if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'execute_commands'):
-                    await self.bot.command_manager.execute_commands(scheduled_msg)
-                    self.logger.info("Scheduled command dispatched to CommandManager.execute_commands")
-                else:
-                    # Fallback: attempt a best-effort execution for a small set of known operations
-                    if hasattr(self.bot, 'meshcore') and hasattr(self.bot.meshcore, 'commands'):
-                        cmd_lower = command_text.split()[0].lower()
-                        if cmd_lower in ('advert', 'send_advert'):
-                            try:
-                                await self.bot.meshcore.commands.send_advert(flood=True)
-                                self.logger.info("Scheduled advert executed via meshcore.commands.send_advert")
-                            except Exception as e:
-                                self.logger.error(f"Fallback advert execution failed: {e}")
-                        else:
-                            # Unable to execute as command: send as channel message fallback
-                            if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'send_channel_message'):
-                                target_channel = channel_val or ''
-                                await self.bot.command_manager.send_channel_message(target_channel, command_text)
-                                self.logger.warning("No execute_commands available; sent command text as fallback message")
-                            else:
-                                self.logger.error("No command execution or send path available for scheduled command")
-                    else:
-                        # Last resort: send as plain channel message
-                        if hasattr(self.bot, 'command_manager') and hasattr(self.bot.command_manager, 'send_channel_message'):
-                            target_channel = channel_val or ''
-                            await self.bot.command_manager.send_channel_message(target_channel, command_text)
-                            self.logger.warning("No command execution path found; sent command text as channel message")
-                        else:
-                            self.logger.error("No command execution or send path available for scheduled command")
-            except Exception as e:
-                self.logger.error(f"Error executing scheduled command '{command_text}': {e}")
-            return
-        
-        # Not a command, send as a normal channel message
-        try:
-            await self.bot.command_manager.send_channel_message(channel, message)
-        except Exception as e:
-            self.logger.error(f"Error sending scheduled channel message: {e}")
-    
+
+        await self.bot.command_manager.send_channel_message(channel, message)
+
     def start(self):
         """Start the scheduler in a separate thread"""
         self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.scheduler_thread.start()
-    
+
     def run_scheduler(self):
         """Run the scheduler in a separate thread"""
         self.logger.info("Scheduler thread started")
@@ -393,15 +367,15 @@ class MessageScheduler:
         last_feed_poll_time = 0
         last_job_count = 0
         last_job_log_time = 0
-        
+
         while self.bot.connected:
             current_time = self.get_current_time()
-            
+
             # Log current time every 5 minutes for debugging
             if time.time() - last_log_time > 300:  # 5 minutes
                 self.logger.info(f"Scheduler running - Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 last_log_time = time.time()
-            
+
             # Check for pending scheduled messages (only log when count changes, max once per 30 seconds)
             pending_jobs = schedule.get_jobs()
             current_job_count = len(pending_jobs) if pending_jobs else 0
@@ -411,17 +385,19 @@ class MessageScheduler:
                     self.logger.debug(f"Found {current_job_count} scheduled jobs")
                 last_job_count = current_job_count
                 last_job_log_time = current_time_sec
-            
+
             # Check for interval-based advertising
             self.check_interval_advertising()
-            
+
             # Poll feeds every minute (but feeds themselves control their check intervals)
             if time.time() - last_feed_poll_time >= 60:  # Every 60 seconds
-                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and 
+                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and
                     hasattr(self.bot.feed_manager, 'enabled') and self.bot.feed_manager.enabled and
                     hasattr(self.bot, 'connected') and self.bot.connected):
                     # Run feed polling in async context
+                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self.bot.feed_manager.poll_all_feeds(),
                             self.bot.main_event_loop
@@ -438,25 +414,27 @@ class MessageScheduler:
                         except RuntimeError:
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
-                        
+
                         try:
                             loop.run_until_complete(self.bot.feed_manager.poll_all_feeds())
                             self.logger.debug("Feed polling cycle completed")
                         except Exception as e:
                             self.logger.error(f"Error in feed polling cycle: {e}")
                     last_feed_poll_time = time.time()
-            
+
             # Channels are fetched once on launch only - no periodic refresh
             # This prevents losing channels during incomplete updates
-            
+
             # Process pending channel operations from web viewer (every 5 seconds)
             if not hasattr(self, 'last_channel_ops_check_time'):
                 self.last_channel_ops_check_time = 0
-            
+
             if time.time() - self.last_channel_ops_check_time >= 5:  # Every 5 seconds
-                if (hasattr(self.bot, 'channel_manager') and self.bot.channel_manager and 
+                if (hasattr(self.bot, 'channel_manager') and self.bot.channel_manager and
                     hasattr(self.bot, 'connected') and self.bot.connected):
+                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self._process_channel_operations(),
                             self.bot.main_event_loop
@@ -466,23 +444,26 @@ class MessageScheduler:
                         except Exception as e:
                             self.logger.error(f"Error processing channel operations: {e}")
                     else:
+                        # Fallback: create new event loop if main loop not available
                         try:
                             loop = asyncio.get_event_loop()
                         except RuntimeError:
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
-                        
+
                         loop.run_until_complete(self._process_channel_operations())
                     self.last_channel_ops_check_time = time.time()
-            
+
             # Process feed message queue (every 2 seconds)
             if not hasattr(self, 'last_message_queue_check_time'):
                 self.last_message_queue_check_time = 0
-            
+
             if time.time() - self.last_message_queue_check_time >= 2:  # Every 2 seconds
-                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and 
+                if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and
                     hasattr(self.bot, 'connected') and self.bot.connected):
+                    import asyncio
                     if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+                        # Schedule coroutine in the running main event loop
                         future = asyncio.run_coroutine_threadsafe(
                             self.bot.feed_manager.process_message_queue(),
                             self.bot.main_event_loop
@@ -492,70 +473,78 @@ class MessageScheduler:
                         except Exception as e:
                             self.logger.error(f"Error processing message queue: {e}")
                     else:
+                        # Fallback: create new event loop if main loop not available
                         try:
                             loop = asyncio.get_event_loop()
                         except RuntimeError:
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
-                        
+
                         loop.run_until_complete(self.bot.feed_manager.process_message_queue())
                     self.last_message_queue_check_time = time.time()
-            
+
             schedule.run_pending()
             time.sleep(1)
-        
+
         self.logger.info("Scheduler thread stopped")
-    
+
     def check_interval_advertising(self):
         """Check if it's time to send an interval-based advert"""
         try:
             advert_interval_hours = self.bot.config.getint('Bot', 'advert_interval_hours', fallback=0)
             if advert_interval_hours <= 0:
                 return  # Interval advertising disabled
-            
+
             current_time = time.time()
-            
+
             # Check if enough time has passed since last advert
             if not hasattr(self.bot, 'last_advert_time') or self.bot.last_advert_time is None:
                 # First time, set the timer
                 self.bot.last_advert_time = current_time
                 return
-            
+
             time_since_last_advert = current_time - self.bot.last_advert_time
             interval_seconds = advert_interval_hours * 3600  # Convert hours to seconds
-            
+
             if time_since_last_advert >= interval_seconds:
                 self.logger.info(f"Time for interval-based advert (every {advert_interval_hours} hours)")
                 self.send_interval_advert()
                 self.bot.last_advert_time = current_time
-                
+
         except Exception as e:
             self.logger.error(f"Error checking interval advertising: {e}")
-    
+
     def send_interval_advert(self):
         """Send an interval-based advert (synchronous wrapper)"""
         current_time = self.get_current_time()
         self.logger.info(f"📢 Sending interval-based flood advert at {current_time.strftime('%H:%M:%S')}")
-        
+
+        import asyncio
+
         # Use the main event loop if available, otherwise create a new one
+        # This prevents deadlock when the main loop is already running
         if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+            # Schedule coroutine in the running main event loop
             future = asyncio.run_coroutine_threadsafe(
                 self._send_interval_advert_async(),
                 self.bot.main_event_loop
             )
+            # Wait for completion (with timeout to prevent indefinite blocking)
             try:
                 future.result(timeout=60)  # 60 second timeout
             except Exception as e:
                 self.logger.error(f"Error sending interval advert: {e}")
         else:
+            # Fallback: create new event loop if main loop not available
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-            
+
+            # Run the async function in the event loop
             loop.run_until_complete(self._send_interval_advert_async())
-    
+
     async def _send_interval_advert_async(self):
         """Send an interval-based advert (async implementation)"""
         try:
@@ -564,17 +553,17 @@ class MessageScheduler:
             self.logger.info("Interval-based flood advert sent successfully")
         except Exception as e:
             self.logger.error(f"Error sending interval-based advert: {e}")
-    
+
     async def _process_channel_operations(self):
         """Process pending channel operations from the web viewer"""
         try:
             db_path = str(self.bot.db_manager.db_path)  # Ensure string, not Path object
-            
+
             # Get pending operations
             with sqlite3.connect(db_path, timeout=30.0) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                
+
                 cursor.execute('''
                     SELECT id, operation_type, channel_idx, channel_name, channel_key_hex
                     FROM channel_operations
@@ -582,25 +571,25 @@ class MessageScheduler:
                     ORDER BY created_at ASC
                     LIMIT 10
                 ''')
-                
+
                 operations = cursor.fetchall()
-            
+
             if not operations:
                 return
-            
+
             self.logger.info(f"Processing {len(operations)} pending channel operation(s)")
-            
+
             for op in operations:
                 op_id = op['id']
                 op_type = op['operation_type']
                 channel_idx = op['channel_idx']
                 channel_name = op['channel_name']
                 channel_key_hex = op['channel_key_hex']
-                
+
                 try:
                     success = False
                     error_msg = None
-                    
+
                     if op_type == 'add':
                         # Add channel
                         if channel_key_hex:
@@ -614,21 +603,21 @@ class MessageScheduler:
                             success = await self.bot.channel_manager.add_channel(
                                 channel_idx, channel_name
                             )
-                        
+
                         if success:
                             self.logger.info(f"Successfully processed channel add operation: {channel_name} at index {channel_idx}")
                         else:
                             error_msg = "Failed to add channel"
-                    
+
                     elif op_type == 'remove':
                         # Remove channel
                         success = await self.bot.channel_manager.remove_channel(channel_idx)
-                        
+
                         if success:
                             self.logger.info(f"Successfully processed channel remove operation: index {channel_idx}")
                         else:
                             error_msg = "Failed to remove channel"
-                    
+
                     # Update operation status
                     with sqlite3.connect(db_path, timeout=30.0) as conn:
                         cursor = conn.cursor()
@@ -649,7 +638,7 @@ class MessageScheduler:
                                 WHERE id = ?
                             ''', (error_msg or 'Unknown error', op_id))
                         conn.commit()
-                
+
                 except Exception as e:
                     self.logger.error(f"Error processing channel operation {op_id}: {e}")
                     # Mark as failed
@@ -666,27 +655,17 @@ class MessageScheduler:
                             conn.commit()
                     except Exception as update_error:
                         self.logger.error(f"Error updating operation status: {update_error}")
-        
+
         except Exception as e:
             db_path = getattr(self.bot.db_manager, 'db_path', 'unknown')
             db_path_str = str(db_path) if db_path != 'unknown' else 'unknown'
             self.logger.error(f"Error in _process_channel_operations: {e}")
             if db_path_str != 'unknown':
                 path_obj = Path(db_path_str)
-                try:
-                    readable = os.access(str(path_obj), os.R_OK) if path_obj.exists() else False
-                    writable = os.access(str(path_obj), os.W_OK) if path_obj.exists() else False
-                except Exception:
-                    readable = False
-                    writable = False
-                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {readable}, writable: {writable})")
+                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {os.access(db_path_str, os.R_OK) if path_obj.exists() else False}, writabl                                                                           e: {os.access(db_path_str, os.W_OK) if path_obj.exists() else False})")
                 # Check parent directory permissions
                 if path_obj.exists():
                     parent = path_obj.parent
-                    try:
-                        parent_writable = os.access(str(parent), os.W_OK) if parent.exists() else False
-                    except Exception:
-                        parent_writable = False
-                    self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {parent_writable})")
+                    self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {os.access(str(parent), os.W_OK) if parent.exists() else False})")
             else:
                 self.logger.error(f"Database path: {db_path_str}")
