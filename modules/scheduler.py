@@ -55,24 +55,23 @@ class MessageScheduler:
                     # Check if this is a command message (cmd: prefix)
                     if message_info.startswith('cmd:'):
                         # Handle command messages differently
-                        # Extract channel and command part
-                        cmd_part = message_info[4:].strip()  # Remove 'cmd:' prefix
+                        # Accept formats:
+                        #  - "cmd:command" -> default channel
+                        #  - "cmd:channel:command" -> specified channel
+                        parts = message_info.split(':', 2)
+                        # parts will be ['cmd', 'command'] or ['cmd', 'channel', 'command']
+                        cmd_part = parts[-1].strip()
                         channel = 'Pogo'  # Default channel
-
-                        # Parse channel if specified in format like "channel:cmd:command"
-                        if ':' in message_info:
-                            parts = message_info.split(':', 2)
-                            if len(parts) >= 3:
-                                channel = parts[0]
-                                cmd_part = parts[2]
+                        if len(parts) == 3:
+                            channel = parts[1].strip()
 
                         self.logger.info(f"Scheduled command message for {channel}: '{cmd_part}'")
-                        # Schedule the command execution
+                        # Schedule the command execution (use synchronous wrapper that runs the async coroutine)
                         hour = int(time_str[:2])
                         minute = int(time_str[2:])
                         schedule_time = f"{hour:02d}:{minute:02d}"
                         schedule.every().day.at(schedule_time).do(
-                            self.execute_scheduled_command, channel.strip(), cmd_part
+                            self.send_scheduled_command, channel.strip(), cmd_part
                         )
                         self.scheduled_messages[time_str] = (channel.strip(), message_info.strip())
                     else:
@@ -151,6 +150,33 @@ class MessageScheduler:
 
             # Run the async function in the event loop
             loop.run_until_complete(self._send_scheduled_message_async(channel, message))
+
+    def send_scheduled_command(self, channel: str, command: str):
+        """Synchronous wrapper to execute a scheduled command (works with schedule library)"""
+        current_time = self.get_current_time()
+        self.logger.info(f"📅 Executing scheduled command at {current_time.strftime('%H:%M:%S')} in {channel}: {command}")
+
+        import asyncio
+
+        # Use the main event loop if available, otherwise create a new one
+        if hasattr(self.bot, 'main_event_loop') and self.bot.main_event_loop and self.bot.main_event_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(
+                self.execute_scheduled_command(channel, command),
+                self.bot.main_event_loop
+            )
+            try:
+                future.result(timeout=60)  # 60 second timeout
+            except Exception as e:
+                self.logger.error(f"Error executing scheduled command: {e}")
+        else:
+            # Fallback: create new event loop if main loop not available
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            loop.run_until_complete(self.execute_scheduled_command(channel, command))
 
     async def execute_scheduled_command(self, channel: str, command: str):
         """Execute a scheduled command as if sent by a remote user"""
@@ -392,7 +418,7 @@ class MessageScheduler:
             # Poll feeds every minute (but feeds themselves control their check intervals)
             if time.time() - last_feed_poll_time >= 60:  # Every 60 seconds
                 if (hasattr(self.bot, 'feed_manager') and self.bot.feed_manager and
-                    hasattr(self.bot.feed_manager, 'enabled') and self.bot.feed_manager.enabled and
+                    hasattr(self.bot, 'feed_manager',) and self.bot.feed_manager.enabled and
                     hasattr(self.bot, 'connected') and self.bot.connected):
                     # Run feed polling in async context
                     import asyncio
@@ -662,10 +688,14 @@ class MessageScheduler:
             self.logger.error(f"Error in _process_channel_operations: {e}")
             if db_path_str != 'unknown':
                 path_obj = Path(db_path_str)
-                self.logger.error(f"Database path: {db_path_str} (exists: {path_obj.exists()}, readable: {os.access(db_path_str, os.R_OK) if path_obj.exists() else False}, writabl                                                                           e: {os.access(db_path_str, os.W_OK) if path_obj.exists() else False})")
-                # Check parent directory permissions
+                self.logger.error(
+                    f"Database path: {db_path_str} (exists: {path_obj.exists()}, "
+                    f"readable: {os.access(db_path_str, os.R_OK) if path_obj.exists() else False}, "
+                    f"writable: {os.access(db_path_str, os.W_OK) if path_obj.exists() else False})"
+                )
                 if path_obj.exists():
                     parent = path_obj.parent
                     self.logger.error(f"Parent directory: {parent} (exists: {parent.exists()}, writable: {os.access(str(parent), os.W_OK) if parent.exists() else False})")
             else:
                 self.logger.error(f"Database path: {db_path_str}")
+                
