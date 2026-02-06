@@ -12,6 +12,7 @@ import pytz
 import sqlite3
 import json
 import os
+import re
 from typing import Dict, Tuple, Any
 from pathlib import Path
 from .utils import format_keyword_response_with_placeholders
@@ -52,30 +53,47 @@ class MessageScheduler:
                         self.logger.warning(f"Invalid time format '{time_str}' for scheduled message: {message_info}")
                         continue
 
-                    # Check if this is a command message (cmd: prefix)
-                    if message_info.startswith('cmd:'):
-                        # Handle command messages differently
-                        # Accept formats:
-                        #  - "cmd:command" -> default channel
-                        #  - "cmd:channel:command" -> specified channel
-                        parts = message_info.split(':', 2)
-                        # parts will be ['cmd', 'command'] or ['cmd', 'channel', 'command']
+                    # Normalize message_info for parsing (preserve original for storage)
+                    raw = message_info.strip()
+
+                    # 1) Channel-first pattern: "<channel>:cmd:<command>"
+                    #    Example: "pogo:cmd:wx sydney"
+                    m = re.match(r'^\s*(?P<channel>[^:]+)\s*:\s*cmd\s*:\s*(?P<cmd>.+)$', raw, flags=re.IGNORECASE)
+                    if m:
+                        channel = m.group('channel').strip()
+                        cmd_part = m.group('cmd').strip()
+                        self.logger.info(f"Scheduled command message for {channel}: '{cmd_part}' (parsed channel-first form)")
+                        hour = int(time_str[:2])
+                        minute = int(time_str[2:])
+                        schedule_time = f"{hour:02d}:{minute:02d}"
+                        schedule.every().day.at(schedule_time).do(
+                            self.send_scheduled_command, channel, cmd_part
+                        )
+                        self.scheduled_messages[time_str] = (channel, raw)
+                        continue
+
+                    # 2) Command-first pattern: "cmd:<command>" or "cmd:<channel>:<command>"
+                    if raw.lower().startswith('cmd:'):
+                        parts = raw.split(':', 2)
+                        # parts could be ['cmd', 'command'] or ['cmd', 'channel', 'command']
                         cmd_part = parts[-1].strip()
                         channel = 'Pogo'  # Default channel
                         if len(parts) == 3:
                             channel = parts[1].strip()
 
-                        self.logger.info(f"Scheduled command message for {channel}: '{cmd_part}'")
-                        # Schedule the command execution (use synchronous wrapper that runs the async coroutine)
+                        self.logger.info(f"Scheduled command message for {channel}: '{cmd_part}' (parsed cmd-first form)")
                         hour = int(time_str[:2])
                         minute = int(time_str[2:])
                         schedule_time = f"{hour:02d}:{minute:02d}"
                         schedule.every().day.at(schedule_time).do(
-                            self.send_scheduled_command, channel.strip(), cmd_part
+                            self.send_scheduled_command, channel, cmd_part
                         )
-                        self.scheduled_messages[time_str] = (channel.strip(), message_info.strip())
+                        self.scheduled_messages[time_str] = (channel, raw)
                     else:
                         # Handle regular messages (existing behavior)
+                        if ':' not in message_info:
+                            self.logger.warning(f"Invalid scheduled message format (missing channel separator): {message_info}")
+                            continue
                         channel, message = message_info.split(':', 1)
                         # Convert HHMM to HH:MM for scheduler
                         hour = int(time_str[:2])
