@@ -4,6 +4,7 @@ Message scheduler functionality for the MeshCore Bot
 Handles scheduled messages and timing
 """
 
+from .models import MeshMessage
 import time
 import threading
 import schedule
@@ -196,30 +197,35 @@ class MessageScheduler:
 
             loop.run_until_complete(self.execute_scheduled_command(channel, command))
 
-    async def execute_scheduled_command(self, channel: str, command: str):
-        """Execute a scheduled command as if sent by a remote user"""
-        self.logger.info(f"Executing scheduled command: '{command}' in channel '{channel}'")
+async def execute_scheduled_command(self, channel: str, command: str):
+    """Execute a scheduled command as if sent by a remote user"""
+    self.logger.info(f"Executing scheduled command: '{command}' in channel '{channel}'")
 
-        # Prepare a fake message structure that the command manager can handle
-        # This simulates a remote user sending a command
-        try:
-            # Create a message structure similar to what the bot receives from mesh
-            # This will be processed by the command manager
-            fake_message = {
-                'channel': channel,
-                'sender': 'scheduled',  # Indicate this is a scheduled command
-                'message': command,
-                'timestamp': time.time(),
-                'is_dm': False,
-                'sender_name': 'Scheduled Command',
-                'sender_id': 'scheduled_command'
-            }
+    try:
+        # Build a MeshMessage dataclass instance — this matches what the command manager expects
+        mesh_message = MeshMessage(
+            content=command,
+            sender_id='scheduled_command',
+            sender_pubkey=None,
+            channel=channel,
+            hops=None,
+            path=None,
+            is_dm=False,
+            timestamp=int(time.time()),
+            snr=None,
+            rssi=None,
+            elapsed=None
+        )
 
-            # Execute the command using the command manager (similar to how remote users send commands)
-            await self.bot.command_manager.handle_command_message(fake_message)
+        # Delegate to the command manager's execution path the same way incoming messages are handled
+        # This calls plugin matching/permission checks and executes the appropriate plugin.
+        await self.bot.command_manager.execute_commands(mesh_message)
 
-        except Exception as e:
-            self.logger.error(f"Error executing scheduled command '{command}': {e}")
+    except AttributeError as ae:
+        # Defensive: if execute_commands doesn't exist, log a clear error so debugging is easier
+        self.logger.error(f"CommandManager missing execute_commands method: {ae}")
+    except Exception as e:
+        self.logger.error(f"Error executing scheduled command '{command}': {e}")
 
     async def _get_mesh_info(self) -> Dict[str, Any]:
         """Get mesh network information for scheduled messages"""
