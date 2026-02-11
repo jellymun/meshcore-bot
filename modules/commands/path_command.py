@@ -1050,65 +1050,135 @@ class PathCommand(BaseCommand):
         
         return None, 0.0
     
-    def _format_path_response(self, node_ids: List[str], repeater_info: Dict[str, Dict[str, Any]]) -> str:
-        """Format the path decode response
+def _format_path_response(self, node_ids: List[str], repeater_info: Dict[str, Dict[str, Any]]) -> str:
+    """Format the path decode response with detailed repeater information
+    
+    Maintains the order of repeaters as they appear in the path (first to last)
+    Includes signal strength, device type, location, and recency information
+    """
+    # Build response lines in path order (first to last as message traveled)
+    lines = []
+    
+    # Process nodes in path order (first to last as message traveled)
+    for node_id in node_ids:
+        info = repeater_info.get(node_id, {})
         
-        Maintains the order of repeaters as they appear in the path (first to last)
-        """
-        # Build response lines in path order (first to last as message traveled)
-        lines = []
-        
-        # Process nodes in path order (first to last as message traveled)
-        for node_id in node_ids:
-            info = repeater_info.get(node_id, {})
-            
-            if info.get('found', False):
-                if info.get('collision', False):
-                    # Multiple repeaters with same prefix
-                    matches = info.get('matches', 0)
-                    line = self.translate('commands.path.node_collision', node_id=node_id, matches=matches)
-                elif info.get('geographic_guess', False):
-                    # Geographic proximity selection
-                    name = info['name']
-                    confidence = info.get('confidence', 0.0)
-                    
-                    # Truncate name if too long
-                    truncation = self.translate('commands.path.truncation')
-                    if len(name) > 20:
-                        name = name[:17] + truncation
-                    
-                    # Add confidence indicator
-                    if confidence >= 0.9:
-                        confidence_indicator = self.high_confidence_symbol
-                    elif confidence >= 0.8:
-                        confidence_indicator = self.medium_confidence_symbol
-                    else:
-                        confidence_indicator = self.low_confidence_symbol
-                    
-                    line = self.translate('commands.path.node_geographic', node_id=node_id, name=name, confidence=confidence_indicator)
-                else:
-                    # Single repeater found
-                    name = info['name']
-                    
-                    # Truncate name if too long
-                    truncation = self.translate('commands.path.truncation')
-                    if len(name) > 27:
-                        name = name[:24] + truncation
-                    
-                    line = self.translate('commands.path.node_format', node_id=node_id, name=name)
-            else:
-                # Unknown repeater
-                line = self.translate('commands.path.node_unknown', node_id=node_id)
-            
-            # Ensure line fits within 130 character limit
-            if len(line) > 130:
+        if info.get('found', False):
+            if info.get('collision', False):
+                # Multiple repeaters with same prefix
+                matches = info.get('matches', 0)
+                line = self.translate('commands.path.node_collision', node_id=node_id, matches=matches)
+            elif info.get('geographic_guess', False):
+                # Geographic proximity selection
+                name = info['name']
+                confidence = info.get('confidence', 0.0)
+                
+                # Build detailed info string
+                details = self._build_repeater_details(info)
+                
+                # Truncate name if too long
                 truncation = self.translate('commands.path.truncation')
-                line = line[:127] + truncation
-            
-            lines.append(line)
+                if len(name) > 20:
+                    name = name[:17] + truncation
+                
+                # Add confidence indicator
+                if confidence >= 0.9:
+                    confidence_indicator = self.high_confidence_symbol
+                elif confidence >= 0.8:
+                    confidence_indicator = self.medium_confidence_symbol
+                else:
+                    confidence_indicator = self.low_confidence_symbol
+                
+                line = f"{node_id}: {name} {confidence_indicator} | {details}"
+            else:
+                # Single repeater found
+                name = info['name']
+                
+                # Build detailed info string
+                details = self._build_repeater_details(info)
+                
+                # Truncate name if too long
+                truncation = self.translate('commands.path.truncation')
+                if len(name) > 20:
+                    name = name[:17] + truncation
+                
+                line = f"{node_id}: {name} | {details}"
+        else:
+            # Unknown repeater
+            line = self.translate('commands.path.node_unknown', node_id=node_id)
         
-        # Return all lines - let _send_path_response handle the splitting
-        return "\n".join(lines)
+        lines.append(line)
+    
+    # Return all lines - let _send_path_response handle the splitting
+    return "\n".join(lines)
+
+
+def _build_repeater_details(self, info: Dict[str, Any]) -> str:
+    """Build a detailed info string for a repeater including signal strength and other details
+    
+    Args:
+        info: Repeater info dictionary from _lookup_repeater_names
+        
+    Returns:
+        str: Formatted detail string (e.g., "RSSI: -76dBm | Type: repeater | Seattle, WA")
+    """
+    details_parts = []
+    
+    # Signal strength (RSSI)
+    signal_strength = info.get('signal_strength')
+    if signal_strength is not None:
+        details_parts.append(f"RSSI: {signal_strength}dBm")
+    
+    # Device type
+    device_type = info.get('device_type')
+    if device_type:
+        details_parts.append(f"Type: {device_type}")
+    
+    # Location (city, state, country)
+    city = info.get('city')
+    state = info.get('state')
+    country = info.get('country')
+    location_parts = []
+    if city:
+        location_parts.append(city)
+    if state:
+        location_parts.append(state)
+    if country and country != state:  # Avoid duplication if state = country
+        location_parts.append(country)
+    
+    if location_parts:
+        details_parts.append(" ".join(location_parts))
+    
+    # Last seen / Recency
+    last_seen = info.get('last_seen')
+    if last_seen:
+        # Format relative time
+        try:
+            from datetime import datetime
+            if isinstance(last_seen, str):
+                last_seen_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+            else:
+                last_seen_dt = last_seen
+            
+            hours_ago = (datetime.now(last_seen_dt.tzinfo) - last_seen_dt).total_seconds() / 3600
+            
+            if hours_ago < 1:
+                time_str = "< 1h ago"
+            elif hours_ago < 24:
+                time_str = f"{int(hours_ago)}h ago"
+            else:
+                days_ago = int(hours_ago / 24)
+                time_str = f"{days_ago}d ago"
+            
+            details_parts.append(f"Seen: {time_str}")
+        except:
+            details_parts.append(f"Seen: {last_seen}")
+    
+    # Join all details with pipe separator
+    if details_parts:
+        return " | ".join(details_parts)
+    else:
+        return "No details available"
     
     async def _send_path_response(self, message: MeshMessage, response: str):
         """Send path response, splitting into multiple messages if necessary"""
